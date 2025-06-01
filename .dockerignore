@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/ # General downloads if any, distinct from app's specific location
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.sqlite # If any sqlite files are generated outside download_location
+*.sqlite3
+*.db # General db files
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.env # Local environment variables (secrets) - .env.example is tracked
+
+# IDE / Editor specific
+.vscode/
+*.code-workspace
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sublime-*
+
+# Application Specific
+UniCourt Data/ # This covers the default download location, session, DB, and debug screenshots
+debug_*.png # Covered by UniCourt Data/debug_screenshots/
+unicourt_session.json # Covered by UniCourt Data/
+
+# Operating System
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Playwright trace files (if generated)
+trace.zip
+
+.pytest_cache/
+.venv/
+test_data/
+unicourt_download/
+venv/

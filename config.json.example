@@ -1,0 +1,6 @@
+{
+    "UNICOURT_EMAIL": "your_unicourt_email@example.com",
+    "UNICOURT_PASSWORD": "your_unicourt_password",
+    "OPENROUTER_API_KEY": "your_openrouter_api_key_here",
+    "OPENROUTER_LLM_MODEL": "anthropic/claude-3-haiku"
+}

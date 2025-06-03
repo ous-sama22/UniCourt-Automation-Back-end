@@ -59,7 +59,11 @@ class UnicourtSelectors(BaseModel):
     # Parties Tab
     PARTIES_TAB_BUTTON: str = "md-tab-item:has(md-icon[aria-label=\"supervisor_account\"]):has-text(\"Parties\")"
     PARTIES_TAB_CONTENT_DETECTOR: str = "md-tab-content.md-active parties table.md-table"
-    PARTY_ROW_SELECTOR: str = "md-tab-content.md-active parties table.md-table tbody tr[ng-repeat*='party_detail_value']"
+    PARTY_ROW_SELECTOR: str = (
+    "md-tabs-content-wrapper > md-tab-content.md-active:has(parties) " # Ensures active tab is the one with parties
+    "parties table.md-table tbody "
+    "tr[ng-repeat*='in parties.column_details']" # Targets the collection name
+    )
     PARTY_NAME_SELECTOR: str = "td:nth-child(1) span[ng-bind-html*='party_fullname']"
     PARTY_TYPE_SELECTOR: str = "td:nth-child(2)"
 

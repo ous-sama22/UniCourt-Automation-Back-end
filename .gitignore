@@ -65,3 +65,4 @@ venv/
 config.json
 unicourt_session.json
 *.png
+unicourt_downloads/unicourt_session.json

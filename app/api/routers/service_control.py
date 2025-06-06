@@ -1,6 +1,6 @@
 # app/api/routers/service_control_router.py
 import os
-import sys
+import signal
 import asyncio
 import logging
 from typing import Dict, Any
@@ -93,12 +93,13 @@ async def request_server_restart(
     if queue_size == 0 and active_tasks == 0:
         logger.info("Queue is empty and no active tasks. Proceeding with graceful shutdown signal.")
         request.app.state.shutting_down = True 
-        async def delayed_exit():
-            await asyncio.sleep(0.5) 
-            logger.info("Exiting process for restart (expected to be handled by systemd or external manager)...")
-            sys.exit(0) 
-        asyncio.create_task(delayed_exit()) # Use asyncio.create_task for modern Python
-        return {"message": "Server shutdown initiated. External process manager (e.g., systemd) should restart the application."}
+        async def delayed_shutdown():
+            await asyncio.sleep(0.5)
+            logger.info("Initiating graceful shutdown (service will be restarted by NSSM)...")
+            # Send CTRL_BREAK_EVENT which NSSM will handle properly
+            os.kill(os.getpid(), signal.CTRL_BREAK_EVENT)
+        asyncio.create_task(delayed_shutdown())
+        return {"message": "Server shutdown initiated. Service will be restarted by NSSM."}
     else:
         logger.warning(f"Cannot restart now. Queue size: {queue_size}, Active tasks: {active_tasks}.")
         raise HTTPException(

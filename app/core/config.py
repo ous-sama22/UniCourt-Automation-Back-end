@@ -157,7 +157,7 @@ class AppSettings(BaseModel):
         extra = 'ignore' 
 
 _cached_settings: Optional[AppSettings] = None
-CLIENT_CONFIG_KEYS = {"UNICOURT_EMAIL", "UNICOURT_PASSWORD", "OPENROUTER_API_KEY", "OPENROUTER_LLM_MODEL"}
+CLIENT_CONFIG_KEYS = {"UNICOURT_EMAIL", "UNICOURT_PASSWORD", "OPENROUTER_API_KEY", "OPENROUTER_LLM_MODEL", "EXTRACT_ASSOCIATED_PARTY_ADDRESSES"}
 
 def load_settings() -> AppSettings:
     global _cached_settings
@@ -172,7 +172,6 @@ def load_settings() -> AppSettings:
                     for key in CLIENT_CONFIG_KEYS:
                         if key in json_config and json_config[key] is not None: 
                             setattr(current_values, key, json_config[key])
-                    
                     if "UNICOURT_SELECTORS" in json_config and isinstance(json_config["UNICOURT_SELECTORS"], dict):
                         try:
                             current_values.UNICOURT_SELECTORS = UnicourtSelectors(**json_config["UNICOURT_SELECTORS"])
@@ -210,10 +209,10 @@ def load_settings() -> AppSettings:
             logger.critical(f"CRITICAL ERROR initializing AppSettings: {e}.", exc_info=True)
             class FallbackSettings: 
                 API_ACCESS_KEY="CRITICAL_SETTINGS_FAILURE"
-            _cached_settings = FallbackSettings() # type: ignore
+            _cached_settings = FallbackSettings()
             raise 
 
-    return _cached_settings # type: ignore
+    return _cached_settings
 
 def get_app_settings() -> AppSettings:
     if _cached_settings is None:

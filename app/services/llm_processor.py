@@ -106,7 +106,7 @@ class LLMProcessor:
             )
         
         prompt_parts.append(
-            "\nProvide the output STRICTLY in the following JSON format. Use 'Not Found' or null if a specific piece of information is not present in THIS document. For 'associated_parties', only include parties for whom an address was found in THIS document."
+            "\nProvide the output STRICTLY in the following JSON format. If a specific piece of information is not found in THIS document, set its value to null (not 'Not Found' or any other string). For 'associated_parties', only include parties for whom an address was found in THIS document."
         )
         prompt_parts.append(
             """
@@ -264,6 +264,11 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
 
             if raw_json_dict:
                 try:
+                    # Convert any "Not Found" strings to None for consistency
+                    for key in raw_json_dict:
+                        if key != "associated_parties" and raw_json_dict[key] == "Not Found":
+                            raw_json_dict[key] = None
+                    
                     # Validate and merge data from this batch
                     batch_llm_data = LLMResponseData(**raw_json_dict)
                     
@@ -339,4 +344,4 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
         else: # Hard failure
             logger.warning(f"Failed to extract info from {doc_full_path} using LLM. Notes: {combined_notes}")
             
-        return llm_data, combined_notes   
+        return llm_data, combined_notes

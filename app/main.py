@@ -8,7 +8,9 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings, AppSettings, get_app_settings, load_settings
 from app.core.lifespan import lifespan_manager
-from app.api.routers import cases as cases_router, cases as service_control_router, cases as health_router 
+from app.api.routers import cases as cases_router
+from app.api.routers import service_control as service_control_router
+from app.api.routers import health as health_router
 from app.workers.case_worker import background_processor_worker
 from app.db.session import engine, SQLALCHEMY_DATABASE_URL 
 from app.db.init_db import init_db

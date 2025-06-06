@@ -259,8 +259,15 @@ class UnicourtHandler:
         self, dashboard_page: Page, search_term_primary: str, search_term_secondary: Optional[str] = None
     ) -> Tuple[bool, str]:
         log_prefix = f"[{search_term_primary}{' + ' + search_term_secondary if search_term_secondary else ''}]"
-        search_notes: List[str] = []        
-        try:            
+        search_notes: List[str] = []      
+        if len(search_term_primary) > 100:
+            logger.warning(f"{log_prefix} Search term exceeds 100 characters. Truncating to first 99.")
+            search_term_primary = search_term_primary[:99]
+
+        if search_term_secondary and len(search_term_secondary) > 100:
+            logger.warning(f"{log_prefix} Search term exceeds 100 characters. Truncating to first 99.")
+            search_term_secondary = search_term_secondary[:99]
+        try:
             if self.settings.DASHBOARD_URL_IDENTIFIER not in dashboard_page.url.lower():
                 logger.info(f"{log_prefix} Not on dashboard. Navigating to {self.settings.INITIAL_URL}")
                 await dashboard_page.goto(self.settings.INITIAL_URL, wait_until="networkidle", timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000)
@@ -707,7 +714,7 @@ class UnicourtHandler:
         
         if await case_page.locator(self.selectors.PAID_DOCS_TABLE_SELECTOR).is_visible(timeout=5000):
             logger.info(f"[{case_identifier}] Processing 'Documents available for Download' (Paid) section.")
-            await playwright_utils.scroll_to_bottom_of_scrollable(case_page, self.selectors.PAID_DOCS_TABLE_SELECTOR, self.selectors.PAID_DOC_ROW_SELECTOR, "Paid Docs", case_identifier)
+            await playwright_utils.scroll_to_bottom_of_scrollable(case_page, self.selectors.PAID_DOCS_SCROLLABLE_CONTAINER, self.selectors.PAID_DOC_ROW_SELECTOR, "Paid Docs", case_identifier)
             
             all_paid_doc_rows = await case_page.locator(self.selectors.PAID_DOC_ROW_SELECTOR).all()
             logger.info(f"[{case_identifier}] Found {len(all_paid_doc_rows)} rows in Paid section.")
@@ -788,7 +795,35 @@ class UnicourtHandler:
                         proceed_button = confirm_dialog.locator(self.selectors.CONFIRM_ORDER_PROCEED_BUTTON_SELECTOR)
                         await proceed_button.click()
                         logger.info(f"[{case_identifier}] Paid: 'Proceed' clicked for chunk. Waiting for order processing...")
-                        await common.random_delay(7,12, "after clicking proceed, for orders to process on Unicourt backend") # Longer delay
+                        # Wait for loading indicators to appear and disappear for each doc in chunk
+                        all_loading_indicators = case_page.locator(self.selectors.PAID_DOC_ORDER_LOADING_INDICATOR_SELECTOR)
+                        logger.debug(f"[{case_identifier}] Paid: PAID_DOC_ORDER_LOADING_INDICATOR_SELECTOR count: {await all_loading_indicators.count()}")
+                        expected_count = len(chunk_to_order)
+                        
+                        # First wait for all indicators to appear
+                        try:
+                            timeout_ms = self.settings.SHORT_TIMEOUT_SECONDS * 1000
+                            while (await all_loading_indicators.count()) < expected_count and timeout_ms > 0:
+                                await case_page.wait_for_timeout(100)  # Check every 100ms
+                                timeout_ms -= 100
+                            if timeout_ms <= 0:
+                                logger.error(f"[{case_identifier}] Timeout waiting for all {expected_count} loading indicators to appear")
+                        except Exception as e:
+                            logger.error(f"[{case_identifier}] Error waiting for loading indicators to appear: {e}")
+
+                        logger.debug(f"[{case_identifier}] Paid: Waiting for {expected_count}/{await all_loading_indicators.count()} loading indicators to disappear after order click.")
+
+                        # Then wait for all indicators to disappear
+                        try:
+                            await case_page.wait_for_selector(
+                                self.selectors.PAID_DOC_ORDER_LOADING_INDICATOR_SELECTOR, 
+                                state="hidden", 
+                                timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000 * 2
+                            )
+                            logger.info(f"[{case_identifier}] Paid: All loading indicators disappeared after order click. Processing to download in CrowdSourced section...")
+                        except Exception as e:
+                            logger.error(f"[{case_identifier}] Error waiting for loading indicators to disappear: {e}")
+                            playwright_utils.safe_screenshot(case_page, self.settings, "paid_docs_order_loading_timeout", case_identifier)
                         num_ordered_successfully_estimate += len(chunk_to_order) # Rough estimate
                     else:
                         logger.error(f"[{case_identifier}] Paid: Order Documents button not available for chunk. Marking docs in chunk as failed.")

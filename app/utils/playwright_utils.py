@@ -5,7 +5,7 @@ import os
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 from app.core.config import AppSettings, UnicourtSelectors # AppSettings needed
 from app.utils.common import sanitize_filename # Moved import here
-
+from app.core.config import get_app_settings # For accessing current settings
 logger = logging.getLogger(__name__)
 
 async def handle_cookie_banner_if_present(page: Page, settings: AppSettings):
@@ -39,11 +39,12 @@ async def safe_screenshot(page: Page, settings: AppSettings, filename_prefix: st
     except Exception as e:
         logger.error(f"Failed to save screenshot {screenshot_path}: {e}")
 
-async def scroll_to_bottom_of_scrollable(page: Page, scrollable_container_selector: str, item_selector: str, section_name: str, case_identifier: str, max_scrolls: int = 20, no_change_threshold: int = 5):
+async def scroll_to_bottom_of_scrollable(page: Page, scrollable_container_selector: str, item_selector: str, section_name: str, case_identifier: str, no_change_threshold: int = 10):
     """
     Scrolls a specific container to load all items, like document lists.
     """
     logger.debug(f"[{case_identifier}] Scrolling in {section_name} using container '{scrollable_container_selector}' looking for '{item_selector}'.")
+
     scrollable_container = page.locator(scrollable_container_selector)
     if not await scrollable_container.is_visible(timeout=5000):
         logger.warning(f"[{case_identifier}] Scrollable container for {section_name} ('{scrollable_container_selector}') not visible. Skipping scroll.")
@@ -51,10 +52,11 @@ async def scroll_to_bottom_of_scrollable(page: Page, scrollable_container_select
 
     last_item_count = -1
     no_change_count = 0
+    i = 0
 
-    for i in range(max_scrolls):
+    while True:
         current_items = await page.locator(item_selector).count()
-        logger.debug(f"[{case_identifier}] {section_name} scroll attempt {i+1}/{max_scrolls}: Found {current_items} items. Last count: {last_item_count}.")
+        logger.debug(f"[{case_identifier}] {section_name} scroll attempt {i+1}: Found {current_items} items. Last count: {last_item_count}.")
 
         if current_items == last_item_count:
             no_change_count += 1
@@ -68,10 +70,8 @@ async def scroll_to_bottom_of_scrollable(page: Page, scrollable_container_select
         await scrollable_container.evaluate("element => element.scrollTop = element.scrollHeight")
         try:
             # Wait for potential network activity or a short fixed delay
-            await page.wait_for_load_state("networkidle", timeout=3000) # Shorter timeout for network idle
+            await page.wait_for_load_state("networkidle", timeout=6000) # Shorter timeout for network idle
+            i += 1
         except PlaywrightTimeoutError:
-            await asyncio.sleep(0.5) # Fallback delay if network doesn't idle quickly
-    else: # Loop finished due to max_scrolls
-        logger.warning(f"[{case_identifier}] {section_name} reached max scroll attempts ({max_scrolls}). Final item count: {last_item_count}.")
-    
+            await asyncio.sleep(4) # Fallback delay if network doesn't idle quickly
     return last_item_count

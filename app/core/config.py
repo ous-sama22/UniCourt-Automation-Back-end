@@ -69,6 +69,7 @@ class UnicourtSelectors(BaseModel):
 
     # Documents Tab on Case Detail Page
     DOCUMENTS_TAB_BUTTON: str = "md-tab-item:has-text('Documents')"
+    LOADING_INDICATOR: str = ".pt30.pb30.ng-scope.layout-sm-column.layout-align-space-around-stretch.layout-row"
     
     CROWDSOURCED_DOCS_TABLE_SELECTOR: str = "div.download-docs table.document-table"
     CROWDSOURCED_DOC_ROW_SELECTOR: str = "div.download-docs table.document-table > tbody[ng-repeat*='available_doc']"
@@ -77,6 +78,7 @@ class UnicourtSelectors(BaseModel):
     CROWDSOURCED_DOCS_SCROLLABLE_CONTAINER: str = "div.download-docs"
 
     PAID_DOCS_TABLE_SELECTOR: str = "div.order-document table.document-table"
+    PAID_DOCS_SCROLLABLE_CONTAINER: str = "div.order-document"
     PAID_DOC_ROW_SELECTOR: str = "div.order-document table.document-table tbody[ng-repeat*='paid_doc'] tr[ng-class*='paid_doc']"
     PAID_DOC_CHECKBOX_SELECTOR: str = "td md-checkbox[ng-click*='toggle_docs_selection']"
     PAID_DOC_TITLE_SPAN_SELECTOR: str = "td span.docket-document-name[title]"
@@ -84,6 +86,8 @@ class UnicourtSelectors(BaseModel):
     PAID_DOC_DOWNLOAD_LINK_SELECTOR: str = "td span.author a[ng-href*='/file/researchCourtCaseFile/']" 
     PAID_DOC_ORDER_FAILED_LIST_UPDATE_SELECTOR: str = "div.top-message b:has-text('Document Order Failed - Document List Needs Update')"
     PAID_DOC_ORDER_ROW_FAILED_INDICATOR: str = "td.order-status-failed-indicator" 
+    PAID_DOC_ORDER_LOADING_INDICATOR_SELECTOR: str = "div.md-container.md-mode-indeterminate" # The bar that appears when documents are being ordered
+    
 
     ORDER_DOCUMENTS_BUTTON_SELECTOR: str = "button[ng-click*='order_docs'][hide-xs]:not([disabled])"
     CONFIRM_ORDER_DIALOG_SELECTOR: str = "md-dialog[aria-label*='Confirm Order'], md-dialog[class*='flex-gt-md-40']"
@@ -126,7 +130,7 @@ class AppSettings(BaseModel):
     DOC_KEYWORDS_COMPLAINT: List[str] = ["COMPLAINT"] 
     PAID_DOC_ORDER_CHUNK_SIZE: int = 10
 
-    MAX_IMAGES_PER_LLM_CALL: int = Field(int(os.getenv("MAX_IMAGES_PER_LLM_CALL", "8")), gt=0)
+    MAX_IMAGES_PER_LLM_CALL: int = Field(int(os.getenv("MAX_IMAGES_PER_LLM_CALL", "5")), gt=0)
     MAX_LLM_ATTEMPTS_PER_BATCH: int = Field(int(os.getenv("MAX_LLM_ATTEMPTS_PER_BATCH", "2")), gt=0)
 
 

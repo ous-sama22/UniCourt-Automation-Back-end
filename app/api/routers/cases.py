@@ -26,7 +26,8 @@ def _db_case_to_response(db_case: db_models.Case) -> api_models.CaseDetailRespon
                     api_models.ProcessedDocumentSummaryItem(
                         document_name=summary_item_db.get("document_name", "N/A"),
                         unicourt_doc_key=summary_item_db.get("unicourt_doc_key"),
-                        status=summary_item_db.get("status", "Unknown")
+                        status=summary_item_db.get("status", "Unknown"),
+                        notes=summary_item_db.get("notes", "") # Optional, may not exist
                     )
                 )
     

@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 def get_case_by_case_number(db: Session, case_number: str) -> Optional[db_models.Case]:
     return db.query(db_models.Case).filter(db_models.Case.case_number == case_number).first()
 
+def get_case_by_id(db: Session, case_id: int) -> Optional[db_models.Case]:
+    return db.query(db_models.Case).filter(db_models.Case.id == case_id).first()
+
 def create_case(db: Session, case_data: api_models.CaseSubmitDetail) -> db_models.Case:
     db_case = db_models.Case(
         case_number=case_data.case_number_for_db_id.strip(),

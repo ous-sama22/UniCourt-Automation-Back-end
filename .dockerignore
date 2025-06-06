@@ -40,9 +40,8 @@ ENV/
 *.sublime-*
 
 # Application Specific
-UniCourt Data/ # This covers the default download location, session, DB, and debug screenshots
+
 debug_*.png # Covered by UniCourt Data/debug_screenshots/
-unicourt_session.json # Covered by UniCourt Data/
 
 # Operating System
 .DS_Store
@@ -59,5 +58,4 @@ trace.zip
 .pytest_cache/
 .venv/
 test_data/
-unicourt_download/
 venv/

@@ -43,49 +43,60 @@ async def background_processor_worker(app: FastAPI, worker_id: int):
             try:
                 # Get case details from the queue
                 # Queue items: (case_id, case_obj_from_queue: db_models.Case)
-                case_id, case_obj_for_processing = await asyncio.wait_for(app.state.case_processing_queue.get(), timeout=1.0)
+                case_id, _ = await asyncio.wait_for(app.state.case_processing_queue.get(), timeout=1.0)
                 
-                case_number_for_db = case_obj_for_processing.case_number # For logging and tracking
-
-                logger.info(f"Worker {worker_id}: Picked up case {case_number_for_db} (ID: {case_id}) from queue.")
-
-                async with app.state.active_cases_lock:
-                    if case_number_for_db in app.state.actively_processing_cases:
-                        logger.warning(f"Worker {worker_id}: Case {case_number_for_db} (ID: {case_id}) is already being processed by another worker. Re-queuing.")
-                        await app.state.case_processing_queue.put((case_id, case_obj_for_processing))
-                        app.state.case_processing_queue.task_done() # Mark original task_done
-                        await asyncio.sleep(0.1) # Small delay
-                        continue
-                    app.state.actively_processing_cases.add(case_number_for_db)
-                
-                async with app.state.processing_count_lock:
-                    app.state.active_processing_count += 1
-                
-                logger.info(f"Worker {worker_id}: Starting processing for case {case_number_for_db} (ID: {case_id}). Active tasks: {app.state.active_processing_count}")
-
+                # Create a new database session for this iteration
                 db_session = SessionLocal()
                 try:
-                    case_processor_service = CaseProcessorService(
-                        db=db_session,
-                        settings=worker_settings,
-                        unicourt_handler=worker_unicourt_handler, # Pass worker-specific handler
-                        llm_processor=llm_processor
-                    )
-                    await case_processor_service.process_single_case(case_id, case_obj_for_processing)
-                except Exception as e:
-                    logger.critical(f"Worker {worker_id}: Unhandled error during case {case_number_for_db} (ID: {case_id}) processing: {e}", exc_info=True)
-                    # Basic error status update in DB if process_single_case failed critically before setting status
-                    from app.db import crud, models as db_models # Local import for safety
-                    crud.update_case_status(db_session, case_id, db_models.CaseStatusEnum.WORKER_ERROR)
-                finally:
-                    db_session.close()
-                    app.state.case_processing_queue.task_done()
+                    # Get a fresh copy of the case object from the database
+                    from app.db import crud
+                    case_obj_for_processing = crud.get_case_by_id(db_session, case_id)
+                    if not case_obj_for_processing:
+                        logger.error(f"Worker {worker_id}: Case with ID {case_id} not found in database")
+                        app.state.case_processing_queue.task_done()
+                        continue
+
+                    case_number_for_db = case_obj_for_processing.case_number # For logging and tracking
+
+                    logger.info(f"Worker {worker_id}: Picked up case {case_number_for_db} (ID: {case_id}) from queue.")
+
                     async with app.state.active_cases_lock:
                         if case_number_for_db in app.state.actively_processing_cases:
-                             app.state.actively_processing_cases.remove(case_number_for_db)
+                            logger.warning(f"Worker {worker_id}: Case {case_number_for_db} (ID: {case_id}) is already being processed by another worker. Re-queuing.")
+                            await app.state.case_processing_queue.put((case_id, case_obj_for_processing))
+                            app.state.case_processing_queue.task_done() # Mark original task_done
+                            await asyncio.sleep(0.1) # Small delay
+                            continue
+                        app.state.actively_processing_cases.add(case_number_for_db)
+                    
                     async with app.state.processing_count_lock:
-                        app.state.active_processing_count -= 1
-                    logger.info(f"Worker {worker_id}: Finished processing case {case_number_for_db} (ID: {case_id}). Active tasks: {app.state.active_processing_count}")
+                        app.state.active_processing_count += 1
+                    
+                    logger.info(f"Worker {worker_id}: Starting processing for case {case_number_for_db} (ID: {case_id}). Active tasks: {app.state.active_processing_count}")
+
+                    try:
+                        case_processor_service = CaseProcessorService(
+                            db=db_session,
+                            settings=worker_settings,
+                            unicourt_handler=worker_unicourt_handler, # Pass worker-specific handler
+                            llm_processor=llm_processor
+                        )
+                        await case_processor_service.process_single_case(case_id, case_obj_for_processing)
+                    except Exception as e:
+                        logger.critical(f"Worker {worker_id}: Unhandled error during case {case_number_for_db} (ID: {case_id}) processing: {e}", exc_info=True)
+                        # Basic error status update in DB if process_single_case failed critically before setting status
+                        from app.db import crud, models as db_models # Local import for safety
+                        crud.update_case_status(db_session, case_id, db_models.CaseStatusEnum.WORKER_ERROR)
+                    finally:
+                        app.state.case_processing_queue.task_done()
+                        async with app.state.active_cases_lock:
+                            if case_number_for_db in app.state.actively_processing_cases:
+                                app.state.actively_processing_cases.remove(case_number_for_db)
+                        async with app.state.processing_count_lock:
+                            app.state.active_processing_count -= 1
+                        logger.info(f"Worker {worker_id}: Finished processing case {case_number_for_db} (ID: {case_id}). Active tasks: {app.state.active_processing_count}")
+                finally:
+                    db_session.close()
 
             except asyncio.TimeoutError:
                 # Queue was empty, continue checking

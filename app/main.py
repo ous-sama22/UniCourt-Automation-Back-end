@@ -4,9 +4,7 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from contextlib import asynccontextmanager
-# Playwright not directly used here anymore for global state in main
-# from playwright.async_api import Playwright, async_playwright 
+from contextlib import asynccontextmanager 
 
 from app.core.config import settings, AppSettings, get_app_settings, load_settings
 from app.core.lifespan import lifespan_manager

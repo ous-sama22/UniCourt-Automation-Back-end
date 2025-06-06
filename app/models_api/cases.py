@@ -26,6 +26,7 @@ class ProcessedDocumentSummaryItem(BaseModel):
     document_name: str
     unicourt_doc_key: Optional[str] = None
     status: str # From DocumentProcessingStatusEnum
+    notes: Optional[str] = None # General message about processing status
 
 class AssociatedPartyData(BaseModel):
     name: str

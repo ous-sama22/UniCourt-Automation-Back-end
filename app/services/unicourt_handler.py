@@ -491,9 +491,14 @@ class UnicourtHandler:
                                               state="visible", 
                                               timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000)
             logger.info(f"[{case_identifier}] 'Parties' tab content loaded.")
+            
+            await case_page.wait_for_selector(self.selectors.PARTY_ROW_SELECTOR, 
+                                            state="visible", 
+                                            timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
 
             party_rows = await case_page.locator(self.selectors.PARTY_ROW_SELECTOR).all()
             if not party_rows:
+                
                 logger.warning(f"[{case_identifier}] No party rows found using selector '{self.selectors.PARTY_ROW_SELECTOR}'.")
                 return []
 
@@ -737,7 +742,8 @@ class UnicourtHandler:
                         processed_doc_summaries.append({
                             "document_name": doc_original_title, 
                             "unicourt_doc_key": doc_key_for_summary, 
-                            "status": doc_status_for_summary.value
+                            "status": doc_status_for_summary.value,
+                            "notes": f"Document requires payment. Cost: {cost_str}"
                         })
                         continue
                     

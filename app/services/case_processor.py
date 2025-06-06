@@ -5,6 +5,7 @@ import logging
 import shutil # For deleting folders
 from typing import Tuple, Optional, Dict, Any, Set, List
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from playwright.async_api import Page
 
 from app.core.config import AppSettings
@@ -300,9 +301,8 @@ class CaseProcessorService:
 
                 if all_case_info_found_prior_to_this_doc:
                     logger.info(f"[{case_db_obj.case_number}] All required case-level info found BEFORE '{trans_doc_info.original_title}'. Marking as skipped for LLM.")
-                    self._update_doc_summary_status(case_db_obj, trans_doc_info.original_title, trans_doc_info.unicourt_doc_key, db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_COMPLETED, "Skipped (LLM); all case info previously found.")
+                    self._update_doc_summary_status(case_db_obj, trans_doc_info.original_title, trans_doc_info.unicourt_doc_key, db_models.DocumentProcessingStatusEnum.SKIPPED_PROCESSING_NOT_NEEDED, "Skipped (LLM); all case info previously found.")
                     # No need to call _process_single_document_with_llm, just update status and continue to next doc in bundle
-                    # (which will also be skipped if all_case_info_found_prior_to_this_doc is still true)
                     continue # Move to the next document in llm_bundle_docs
 
                 # If we reach here, some case-level info is still needed, so we process this document with LLM
@@ -321,32 +321,28 @@ class CaseProcessorService:
                 
                 # Determine the outcome status for *this document's* LLM processing attempt
                 current_doc_llm_status: db_models.DocumentProcessingStatusEnum
-                if "File_Conversion_Failed" in llm_notes or "File missing for LLM" in llm_notes:
+                if "File_Conversion_Failed" in llm_notes:
                      current_doc_llm_status = db_models.DocumentProcessingStatusEnum.LLM_PREPARATION_FAILED
                 elif returned_llm_data is None: # Indicates a hard failure in LLM call or parsing
                     current_doc_llm_status = db_models.DocumentProcessingStatusEnum.LLM_PROCESSING_ERROR
                 # returned_llm_data is not None (could be empty LLMResponseData or with data)
                 elif "No specific information requested for this LLM pass" in llm_notes:
-                     current_doc_llm_status = db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_COMPLETED # No new info needed by this doc
+                     current_doc_llm_status = db_models.DocumentProcessingStatusEnum.SKIPPED_PROCESSING_NOT_NEEDED # No new info needed by this doc
                 elif "LLM processed all batches but found no requested data" in llm_notes :
-                    current_doc_llm_status = db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_COMPLETED # LLM ran but found nothing new
+                    current_doc_llm_status = db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_FAILED # LLM ran but found nothing new
                 else: # Assumed success if llm_data is present and no specific error notes for this doc
-                    current_doc_llm_status = db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_COMPLETED
+                    current_doc_llm_status = db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_SUCCESS
                 
                 self._update_doc_summary_status(case_db_obj, trans_doc_info.original_title, trans_doc_info.unicourt_doc_key, current_doc_llm_status, llm_notes)
 
-            # After the loop, ensure any documents in llm_bundle_docs that were *not* iterated through
-            # (because an earlier doc might have found all info and caused a break, though we removed the break)
             # are also marked appropriately. This is more of a safeguard now.
             if docs_iterated_count < len(llm_bundle_docs):
                 logger.info(f"[{case_db_obj.case_number}] Marking remaining {len(llm_bundle_docs) - docs_iterated_count} docs as skipped post-loop.")
                 for i in range(docs_iterated_count, len(llm_bundle_docs)):
                     skipped_doc_info = llm_bundle_docs[i]
-                    self._update_doc_summary_status(case_db_obj, skipped_doc_info.original_title, skipped_doc_info.unicourt_doc_key, db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_COMPLETED, "Skipped (LLM); loop ended early or all info found by prior docs.")
+                    self._update_doc_summary_status(case_db_obj, skipped_doc_info.original_title, skipped_doc_info.unicourt_doc_key, db_models.DocumentProcessingStatusEnum.SKIPPED_PROCESSING_NOT_NEEDED, "Skipped (LLM); loop ended early or all info found by prior docs.")
 
             # --- Final Case Status Determination ---
-            # (The refined status determination logic from your previous version should be here)
-            # For clarity, I'm including the version we worked on:
             logger.debug(f"[{case_number_for_db}] Final check of processed_documents_summary before determining case status: {case_db_obj.processed_documents_summary}")
 
             has_doc_processing_errors = False
@@ -357,8 +353,10 @@ class CaseProcessorService:
 
                     if doc_type_in_summary in [db_models.DocumentTypeEnum.FINAL_JUDGMENT, db_models.DocumentTypeEnum.COMPLAINT]:
                         if status_in_summary not in [
-                            db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_COMPLETED.value,
-                            db_models.DocumentProcessingStatusEnum.SKIPPED_REQUIRES_PAYMENT.value 
+                            db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_SUCCESS.value,
+                            db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_FAILED.value,
+                            db_models.DocumentProcessingStatusEnum.SKIPPED_PROCESSING_NOT_NEEDED.value,
+                            db_models.DocumentProcessingStatusEnum.SKIPPED_REQUIRES_PAYMENT.value,
                         ]:
                             logger.warning(f"[{case_number_for_db}] Relevant document '{s_item.get('document_name')}' has non-final/error status: {status_in_summary}")
                             has_doc_processing_errors = True
@@ -384,31 +382,9 @@ class CaseProcessorService:
                     final_case_status = db_models.CaseStatusEnum.COMPLETED_SUCCESSFULLY
                 else:
                     logger.warning(f"[{case_number_for_db}] Case completed without document processing errors, but not all essential data was found.")
-                    # Decide if "missing data" should be its own success category or an error.
-                    # For now, let's assume if no *processing* errors, it's still a form of success,
-                    # but the data fields in the DB will show what's missing.
-                    # If strictness is required, this could be COMPLETED_MISSING_DATA or even COMPLETED_WITH_ERRORS.
-                    final_case_status = db_models.CaseStatusEnum.COMPLETED_SUCCESSFULLY # Or COMPLETED_MISSING_DATA
-            
-            logger.info(f"[{case_number_for_db}] Case processing finished. Final status: {final_case_status.value}")
-            
-            # --- Final Case Status Determination ---
-            # Check processed_documents_summary for any errors
-            has_doc_processing_errors = any(
-                s["status"] not in [
-                    db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_COMPLETED.value,
-                    db_models.DocumentProcessingStatusEnum.SKIPPED_REQUIRES_PAYMENT.value,
-                    # DOWNLOAD_SUCCESS is intermediate, should become LLM_...
-                ] for s in case_db_obj.processed_documents_summary if self._doc_type_from_summary(s) != db_models.DocumentTypeEnum.UNKNOWN
-            ) # Only consider FJ/Complaint docs for this error check
-
-            if has_doc_processing_errors:
-                final_case_status = db_models.CaseStatusEnum.COMPLETED_WITH_ERRORS
-                logger.warning(f"[{case_number_for_db}] Document processing errors found.")
-            else:
-                final_case_status = db_models.CaseStatusEnum.COMPLETED_SUCCESSFULLY
-            
-            logger.info(f"[{case_number_for_db}] Case processing finished. Final status: {final_case_status.value}")
+                    final_case_status = db_models.CaseStatusEnum.COMPLETED_MISSING_DATA
+                
+                logger.info(f"[{case_number_for_db}] Case processing finished. Final status: {final_case_status.value}")
 
         except (Exception) as e: # Catch custom stop exceptions and others
             error_msg = f"Error processing case {case_number_for_db} (ID: {case_id}): {type(e).__name__} - {str(e)}"
@@ -459,6 +435,7 @@ class CaseProcessorService:
             if match_key or match_name_if_no_key:
                 item["status"] = new_status.value
                 if notes: item["notes"] = notes # Add or overwrite notes
+                logger.debug(f"[{case_db_obj.case_number}] Updated doc '{doc_name}' (Key: {doc_key}) status to '{new_status.value}' in summary.")
                 updated = True
                 break
         if not updated: # Should not happen if doc was added during download phase
@@ -471,6 +448,8 @@ class CaseProcessorService:
             })
         
         case_db_obj.processed_documents_summary = summary_list # Assign back
+        # Flag the JSON column as modified for SQLAlchemy to detect the change
+        flag_modified(case_db_obj, "processed_documents_summary")
         try:
             self.db.commit()
             self.db.refresh(case_db_obj)

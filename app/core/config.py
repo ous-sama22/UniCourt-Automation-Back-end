@@ -126,7 +126,7 @@ class AppSettings(BaseModel):
     DOC_KEYWORDS_COMPLAINT: List[str] = ["COMPLAINT"] 
     PAID_DOC_ORDER_CHUNK_SIZE: int = 10
 
-    MAX_IMAGES_PER_LLM_CALL: int = Field(int(os.getenv("MAX_IMAGES_PER_LLM_CALL", "8")), gt=0) # Default to 8-10
+    MAX_IMAGES_PER_LLM_CALL: int = Field(int(os.getenv("MAX_IMAGES_PER_LLM_CALL", "8")), gt=0)
     MAX_LLM_ATTEMPTS_PER_BATCH: int = Field(int(os.getenv("MAX_LLM_ATTEMPTS_PER_BATCH", "2")), gt=0)
 
 

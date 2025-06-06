@@ -8,7 +8,8 @@ import enum
 class CaseStatusEnum(str, enum.Enum):
     QUEUED = "Queued"
     PROCESSING = "Processing"
-    COMPLETED_SUCCESSFULLY = "Completed_Successfully"
+    COMPLETED_SUCCESSFULLY = "Completed_All_Data_Retrieved"
+    COMPLETED_MISSING_DATA = "Completed_Missing_Data"
     COMPLETED_WITH_ERRORS = "Completed_With_Errors"
     CASE_NOT_FOUND_ON_UNICOURT = "Case_Not_Found_On_Unicourt"
     VOLUNTARY_DISMISSAL_FOUND_SKIPPED = "Voluntary_Dismissal_Found_Skipped"
@@ -28,13 +29,17 @@ class DocumentTypeEnum(str, enum.Enum):
 
 class DocumentProcessingStatusEnum(str, enum.Enum):
     IDENTIFIED_FOR_PROCESSING = "Identified_For_Processing"
-    SKIPPED_REQUIRES_PAYMENT = "Skipped_Requires_Payment"
+    SKIPPED_REQUIRES_PAYMENT = "Retrieval_Fee"
     ORDERING_FAILED = "Ordering_Failed" # Covers explicit per-doc failure or link not appearing post-order
     DOWNLOAD_SUCCESS = "Download_Success" # Intermediate state for docs that go to LLM
     DOWNLOAD_FAILED = "Download_Failed"
+    SKIPPED_PROCESSING_NOT_NEEDED = "Skipped_Processing_Not_Needed" # e.g. Voluntary Dismissal found, no FJ/Complaint needed
+    LLM_PREPARATION_FAILED = "LLM_Failed_To_Turn_Doc_Into_Images" # Failed to prepare doc for LLM processing
     LLM_PROCESSING_ERROR = "LLM_Processing_Error" # Error calling LLM API, response parsing error
-    LLM_EXTRACTION_COMPLETED = "LLM_Extraction_Completed" # LLM call was successful, regardless of data found
+    LLM_EXTRACTION_FAILED = "LLM_Required_Infos_Not_Found" # LLM call failed
+    LLM_EXTRACTION_SUCCESS = "LLM_Extraction_Success" # LLM call was successful, data found
     GENERIC_PROCESSING_ERROR = "Generic_Processing_Error" # Other errors during this specific doc's handling
+
 
 
 # --- Main Case Table ---

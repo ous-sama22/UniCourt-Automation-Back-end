@@ -160,7 +160,7 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
             "X-Title": "UniCourt Processor Backend"
         }
 
-        logger.info(f"Preparing LLM call with {len(image_batch_b64)} images for prompt: {prompt_text}... (Attempt {attempt})")
+        logger.debug(f"Preparing LLM call with {len(image_batch_b64)} images for prompt: {prompt_text}... (Attempt {attempt})")
         
         content_parts: List[Dict[str, Any]] = [{"type": "text", "text": prompt_text}]
         for img_b64 in image_batch_b64:
@@ -311,8 +311,8 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
         is_business: bool,
         target_associated_party_names: List[str], # For the whole case
         info_to_extract_for_doc: Dict[str, bool], # Specifically for this document pass
-        max_images_per_llm_call: int = 10,
-        max_llm_attempts_per_batch: int = 2
+        max_images_per_llm_call: int,
+        max_llm_attempts_per_batch: int
 
     ) -> Tuple[Optional[LLMResponseData], str]:
         

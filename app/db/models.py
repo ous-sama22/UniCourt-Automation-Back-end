@@ -33,7 +33,7 @@ class DocumentProcessingStatusEnum(str, enum.Enum):
     ORDERING_FAILED = "Ordering_Failed" # Covers explicit per-doc failure or link not appearing post-order
     DOWNLOAD_SUCCESS = "Download_Success" # Intermediate state for docs that go to LLM
     DOWNLOAD_FAILED = "Download_Failed"
-    SKIPPED_PROCESSING_NOT_NEEDED = "Skipped_Processing_Not_Needed" # e.g. Voluntary Dismissal found, no FJ/Complaint needed
+    SKIPPED_PROCESSING_NOT_NEEDED = "Skipped_Processing_Not_Needed"
     LLM_PREPARATION_FAILED = "LLM_Failed_To_Turn_Doc_Into_Images" # Failed to prepare doc for LLM processing
     LLM_PROCESSING_ERROR = "LLM_Processing_Error" # Error calling LLM API, response parsing error
     LLM_EXTRACTION_FAILED = "LLM_Required_Infos_Not_Found" # LLM call failed

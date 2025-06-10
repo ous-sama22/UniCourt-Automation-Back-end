@@ -100,28 +100,30 @@ class CaseProcessorService:
                 found_reg_state_for_case = True # Update case-level flag
                 db_changed = True
 
-            if self.settings.EXTRACT_ASSOCIATED_PARTY_ADDRESSES and llm_data.associated_parties:
-                current_case_assoc_parties = list(case_db_obj.associated_parties_data or [])
-                # Create a set of (name, address) tuples from existing data to avoid adding exact duplicates
-                existing_name_address_pairs = {(p.get("name"), p.get("address")) for p in current_case_assoc_parties}
+            if self.settings.EXTRACT_ASSOCIATED_PARTY_ADDRESSES and llm_data.associated_parties: # Check global setting
+                # Get a mutable copy if current_case_assoc_parties is not None, else start fresh
+                current_case_assoc_parties_on_db = list(case_db_obj.associated_parties_data or [])
+                
+                new_parties_added_in_this_pass = False
+                for llm_party_detail in llm_data.associated_parties: # llm_party_detail is AssociatedPartyLLMDetail
+                    party_name = llm_party_detail.name
+                    party_address = llm_party_detail.address # Can be None if Optional[str]
 
-                for llm_party_info in llm_data.associated_parties:
-                    party_name = llm_party_info.get("name")
-                    party_address = llm_party_info.get("address")
-                    # Only add if name and address are present, and this specific name-address pair isn't already there
-                    if party_name and party_address and (party_name, party_address) not in existing_name_address_pairs:
-                        # And only if we don't already have *an* address for this party_name (first found wins for a given name)
-                        if not found_party_addresses_for_case.get(party_name, False):
-                            current_case_assoc_parties.append({
-                                "name": party_name, 
-                                "address": party_address, 
-                                "source_doc_title": trans_doc_info.original_title
-                            })
-                            found_party_addresses_for_case[party_name] = True # Update case-level flag for this party
-                            existing_name_address_pairs.add((party_name, party_address)) # Add to current doc's tracking
-                            db_changed = True
-                if db_changed: 
-                     case_db_obj.associated_parties_data = current_case_assoc_parties
+                    # Only proceed if a name is present and we are still looking for this party's address (or it's a new party to us)
+                    # and an address was actually found by the LLM for this party in this document.
+                    if party_name and party_address and not found_party_addresses_for_case.get(party_name, False):
+
+                        current_case_assoc_parties_on_db.append({
+                            "name": party_name,
+                            "address": party_address, # This will be stored as a string, or null if None
+                            "source_doc_title": trans_doc_info.original_title
+                        })
+                        found_party_addresses_for_case[party_name] = True # Mark address as found for this party for the case
+                        db_changed = True # Signal that case_db_obj.associated_parties_data needs update
+                        new_parties_added_in_this_pass = True # Signal that the list itself was modified
+                
+                if new_parties_added_in_this_pass: # Only update if the list was actually changed
+                    case_db_obj.associated_parties_data = current_case_assoc_parties_on_db
 
             if db_changed:
                 try:
@@ -278,6 +280,17 @@ class CaseProcessorService:
                 else: # Relevant docs identified, but none downloaded (e.g. all paid, all failed download)
                     final_case_status = db_models.CaseStatusEnum.COMPLETED_WITH_ERRORS # Or a more specific status if needed
                 raise Exception("NoDocsForLLMStopProcessing")
+
+            def sort_key_for_llm_docs(doc_info: TransientDocumentInfo):
+                if doc_info.document_type == db_models.DocumentTypeEnum.FINAL_JUDGMENT:
+                    return 0  # Process FJs first
+                elif doc_info.document_type == db_models.DocumentTypeEnum.COMPLAINT:
+                    return 1  # Process Complaints next
+                else:
+                    return 2  # Others last (though your current logic only adds FJ/Complaint)
+            
+            llm_bundle_docs.sort(key=sort_key_for_llm_docs)
+            logger.info(f"[{case_number_for_db}] Sorted llm_bundle_docs for processing. Order: {[d.document_type.value for d in llm_bundle_docs]}")
 
 
             # --- Phase 3: Process Downloaded Documents with LLM ---

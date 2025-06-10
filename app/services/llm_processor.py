@@ -14,16 +14,25 @@ import io
 import os
 import asyncio
 
+# Disable PIL debug logging
+logging.getLogger('PIL').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Define the structure we expect from the LLM
+
+class AssociatedPartyLLMDetail(BaseModel): 
+    name: str
+    address: Optional[str] = None 
+
 class LLMResponseData(BaseModel):
     original_creditor_name: Optional[str] = None
     creditor_address: Optional[str] = None
-    associated_parties: List[Dict[str, str]] = [] # List of {"name": "...", "address": "..."}
+    # Use the new inner model for better validation and clarity
+    associated_parties: List[AssociatedPartyLLMDetail] = [] 
     creditor_registration_state: Optional[str] = None
+
 
 class LLMProcessor:
     def __init__(self, settings: AppSettings):
@@ -106,7 +115,7 @@ class LLMProcessor:
             )
         
         prompt_parts.append(
-            "\nProvide the output STRICTLY in the following JSON format. If a specific piece of information is not found in THIS document, set its value to null (not 'Not Found' or any other string). For 'associated_parties', only include parties for whom an address was found in THIS document."
+            "\nProvide the output STRICTLY in the following JSON format. Only return JSON without any surrounding text or markdown. If a specific piece of information is not found in THIS document, set its value to null (not 'Not Found' or any other string). For 'associated_parties', only include parties for whom an address was found in THIS document."
         )
         prompt_parts.append(
             """
@@ -137,13 +146,30 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
         return "\n".join(prompt_parts)
 
     def _strip_markdown_json(self, text: str) -> str:
-        """Strips JSON markdown code fences if present."""
+        """Strips JSON markdown code fences and attempts to extract the first valid JSON object."""
         text = text.strip()
         if text.startswith("```json") and text.endswith("```"):
             text = text[len("```json"): -len("```")]
-        elif text.startswith("```") and text.endswith("```"): # Generic markdown fence
+        elif text.startswith("```") and text.endswith("```"):
             text = text[len("```"): -len("```")]
-        return text.strip()
+        text = text.strip() # Strip again after removing fences
+
+        # Attempt to find the first '{' and the last '}' that form the main JSON object
+        # This helps if there's trailing non-JSON text after the markdown removal.
+        first_brace = text.find('{')
+        last_brace = text.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            potential_json = text[first_brace : last_brace+1]
+            try:
+                # Try to parse this substring to see if it's valid JSON
+                json.loads(potential_json)
+                return potential_json # Return only the valid JSON part
+            except json.JSONDecodeError:
+                # If parsing the substring fails, return the text as it was after stripping markdown fences
+                # This might still lead to errors if the LLM format is very off.
+                logger.warning(f"Could not isolate a valid JSON object from text: {text[:300]}...")
+                return text 
+        return text # Return original if no clear JSON object delimiters found
 
     async def _call_llm_with_image_batch(
         self,
@@ -208,8 +234,8 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
         is_business: bool,
         target_associated_party_names: List[str],
         info_to_extract_for_doc: Dict[str, bool], # What's needed for *this document's current pass*
-        max_images_per_llm_call: int = 10, # New parameter for batching
-        max_llm_attempts_per_batch: int = 2 # New parameter for retries
+        max_images_per_llm_call: int,
+        max_llm_attempts_per_batch: int
     ) -> Tuple[Optional[LLMResponseData], str]:
 
         if not all_images_base64:
@@ -281,11 +307,11 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
                         aggregated_llm_data.creditor_registration_state = batch_llm_data.creditor_registration_state
                     
                     # Merge associated parties, avoiding duplicates by name
-                    existing_assoc_party_names = {p["name"] for p in aggregated_llm_data.associated_parties if p.get("name")}
-                    for new_party in batch_llm_data.associated_parties:
-                        if new_party.get("name") and new_party.get("address") and new_party["name"] not in existing_assoc_party_names:
-                            aggregated_llm_data.associated_parties.append(new_party)
-                            existing_assoc_party_names.add(new_party["name"])
+                    existing_assoc_party_names = {p.name for p in aggregated_llm_data.associated_parties}
+                    for new_party_detail in batch_llm_data.associated_parties:
+                        if new_party_detail.name and new_party_detail.address and new_party_detail.name not in existing_assoc_party_names:
+                            aggregated_llm_data.associated_parties.append(new_party_detail)
+                            existing_assoc_party_names.add(new_party_detail.name)
                             
                 except Exception as e_val:
                     all_batch_notes.append(f"Batch {i+1} Pydantic/Merge Error: {e_val}. Data: {str(raw_json_dict)[:200]}")

@@ -179,16 +179,6 @@ def _get_case_status_or_data_internal(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_number_for_db_id} not found.")
 
 
-@router.get("/{case_number_for_db_id}/status", response_model=api_models.CaseStatusResponseItem)
-async def get_case_status_and_data(
-    case_number_for_db_id: str,
-    request: Request,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(get_read_api_key)
-):
-    return _get_case_status_or_data_internal(case_number_for_db_id, db, request)
-
-
 @router.post("/batch-status", response_model=api_models.BatchCaseStatusResponse)
 async def get_batch_case_statuses(
     payload: api_models.BatchCaseRequest,
@@ -242,3 +232,23 @@ async def get_batch_case_details(
             response_results[case_num] = None 
 
     return api_models.BatchCaseDetailsResponse(results=response_results, errors=response_errors)
+
+
+@router.get("", response_model=List[api_models.CaseDetailResponse])
+async def get_all_cases(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_read_api_key)
+):
+    """Get all cases from the database."""
+    db_cases = crud.get_all_cases(db)
+    return [_db_case_to_response(case) for case in db_cases]
+
+
+@router.get("/{case_number_for_db_id}/status", response_model=api_models.CaseStatusResponseItem)
+async def get_case_status_and_data(
+    case_number_for_db_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_read_api_key)
+):
+    return _get_case_status_or_data_internal(case_number_for_db_id, db, request)

@@ -258,50 +258,69 @@ class UnicourtHandler:
     async def _perform_search_on_dashboard(
         self, dashboard_page: Page, search_term_primary: str, search_term_secondary: Optional[str] = None
     ) -> Tuple[bool, str]:
-        log_prefix = f"[{search_term_primary}{' + ' + search_term_secondary if search_term_secondary else ''}]"
-        search_notes: List[str] = []      
-        if len(search_term_primary) > 100:
-            logger.warning(f"{log_prefix} Search term exceeds 100 characters. Truncating to first 99.")
-            search_term_primary = search_term_primary[:99]
+        max_len = 99
+        if len(search_term_primary) > max_len:
+            original_primary = search_term_primary
+            search_term_primary = search_term_primary[:max_len]
+            logger.warning(
+                f"Primary search term was too long (len: {len(original_primary)}), "
+                f"truncated to {max_len} chars: '{search_term_primary}'"
+            )
 
-        if search_term_secondary and len(search_term_secondary) > 100:
-            logger.warning(f"{log_prefix} Search term exceeds 100 characters. Truncating to first 99.")
-            search_term_secondary = search_term_secondary[:99]
-        try:
-            if self.settings.DASHBOARD_URL_IDENTIFIER not in dashboard_page.url.lower():
-                logger.info(f"{log_prefix} Not on dashboard. Navigating to {self.settings.INITIAL_URL}")
-                await dashboard_page.goto(self.settings.INITIAL_URL, wait_until="networkidle", timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000)
-                await playwright_utils.handle_cookie_banner_if_present(dashboard_page, self.settings)
-
-            await self.clear_search_input(dashboard_page)
-
-            more_options_button = dashboard_page.locator(self.selectors.SEARCH_MORE_OPTIONS_BUTTON)
-            if await more_options_button.is_visible(timeout=3000):
-                await more_options_button.click()
-                await common.random_delay(0.3, 0.8)
-                case_name_option = dashboard_page.locator(self.selectors.SEARCH_CASE_NAME_OPTION)
-                await case_name_option.wait_for(state="visible", timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
-                await case_name_option.click()
-                await common.random_delay(0.2, 1.0)
+        if search_term_secondary and len(search_term_secondary) > max_len:
+            original_secondary = search_term_secondary
+            search_term_secondary = search_term_secondary[:max_len]
+            logger.warning(
+                f"Secondary search term was too long (len: {len(original_secondary)}), "
+                f"truncated to {max_len} chars: '{search_term_secondary}'"
+            )
             
-            search_input_field = dashboard_page.locator(self.selectors.SEARCH_INPUT_FIELD)
-            await search_input_field.wait_for(state="visible", timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
-            await search_input_field.fill(search_term_primary)
-            await common.random_delay(0.3, 0.7)
-            await search_input_field.press("Enter")
-            await expect(dashboard_page.locator(f'md-chip:has-text("{search_term_primary}")')).to_be_visible(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
-
-            if search_term_secondary: 
-                add_conditions_button = dashboard_page.locator(self.selectors.ADD_CONDITIONS_BUTTON)
-                await add_conditions_button.click()
+        log_prefix = f"[{search_term_primary}{' + ' + search_term_secondary if search_term_secondary else ''}]"
+        search_notes: List[str] = []        
+        try:            
+            
+            if search_term_secondary is None: # This is a primary search operation
+                logger.info(f"{log_prefix} Performing primary search. Ensuring fresh dashboard state.")
+                await dashboard_page.goto(self.settings.INITIAL_URL, wait_until="networkidle", timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000 * 1.5) # Increased timeout slightly
+                await playwright_utils.handle_cookie_banner_if_present(dashboard_page, self.settings)
+                await self.clear_search_input(dashboard_page) # Clear any previous state
+                
+                # Input primary search term
+                more_options_button = dashboard_page.locator(self.selectors.SEARCH_MORE_OPTIONS_BUTTON)
+                if await more_options_button.is_visible(timeout=3000):
+                    await more_options_button.click()
+                    await common.random_delay(0.3, 0.8)
+                    case_name_option = dashboard_page.locator(self.selectors.SEARCH_CASE_NAME_OPTION)
+                    await case_name_option.wait_for(state="visible", timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
+                    await case_name_option.click()
+                    await common.random_delay(0.2, 1.0)
+                
+                search_input_field = dashboard_page.locator(self.selectors.SEARCH_INPUT_FIELD)
+                await search_input_field.wait_for(state="visible", timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
+                await search_input_field.fill(search_term_primary)
                 await common.random_delay(0.3, 0.7)
+                await search_input_field.press("Enter")
+                # Ensure the primary search chip is visible
+                await expect(dashboard_page.locator(f'md-chip:has-text("{search_term_primary}")')).to_be_visible(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
+            
+            if search_term_secondary: 
+                logger.info(f"{log_prefix} Adding secondary search condition: {search_term_secondary}")
+                # We should already be on a page with the primary search term active.
+                # No need to re-fill primary search_input_field or press Enter for it.
+                
+                add_conditions_button = dashboard_page.locator(self.selectors.ADD_CONDITIONS_BUTTON)
+                # Increased timeout for visibility of this button, as it might appear after page settles
+                await expect(add_conditions_button).to_be_visible(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000 * 1.5) 
+                await add_conditions_button.click(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000) # This was the timeout point
+                await common.random_delay(0.3, 0.7)
+
                 and_option = dashboard_page.locator(self.selectors.AND_CONDITION_OPTION)
                 await and_option.click()
                 await common.random_delay(0.5, 1.0)
                 await dashboard_page.wait_for_selector(self.selectors.SECOND_SEARCH_CRITERIA, state="visible", timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
                 
                 search_for_button = dashboard_page.locator(self.selectors.SEARCH_FOR_DROPDOWN_BUTTON)
-                if not await search_for_button.is_visible(timeout=1000): # try alt
+                if not await search_for_button.is_visible(timeout=1000): 
                     search_for_button = dashboard_page.locator(self.selectors.SEARCH_FOR_DROPDOWN_ALT_BUTTON)
                 await search_for_button.click()
                 await common.random_delay(0.3, 0.7)
@@ -317,20 +336,26 @@ class UnicourtHandler:
                 second_condition_chip_selector = self.selectors.SECOND_CONDITION_CHIP.format(search_term_secondary)
                 await expect(dashboard_page.locator(second_condition_chip_selector)).to_be_visible(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
             
-            final_search_button_locator = dashboard_page.locator(self.selectors.SEARCH_BUTTON_MULTI_CRITERIA if search_term_secondary else self.selectors.SEARCH_BUTTON)
+            # Click the appropriate search button
+            # If search_term_secondary is present, use SEARCH_BUTTON_MULTI_CRITERIA
+            # Otherwise (primary search only), use SEARCH_BUTTON
+            final_search_button_locator_selector = self.selectors.SEARCH_BUTTON_MULTI_CRITERIA if search_term_secondary else self.selectors.SEARCH_BUTTON
+            final_search_button_locator = dashboard_page.locator(final_search_button_locator_selector)
+            
+            logger.info(f"{log_prefix} Clicking final search button ({final_search_button_locator_selector}).")
             await expect(final_search_button_locator).to_be_enabled(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000)
             await final_search_button_locator.click()
             
-            await dashboard_page.wait_for_selector(self.selectors.SEARCH_RESULTS_AREA_DETECTOR, timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000)
-            await common.random_delay(1.0, 3.0) # Allow results to populate
+            await dashboard_page.wait_for_selector(self.selectors.SEARCH_RESULTS_AREA_DETECTOR, timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000 * 2) # Increased timeout
+            await common.random_delay(1.5, 3.5, "after final search click for results to populate") # Allow results to populate
             return True, "; ".join(search_notes)
         except Exception as e:
-            note = f"SearchPerformError: {type(e).__name__} for '{search_term_primary}': {e}"
+            note = f"SearchPerformError: {type(e).__name__} for '{search_term_primary}{(' + ' + search_term_secondary) if search_term_secondary else ''}': {str(e).splitlines()[0]}" # Cleaner error
             search_notes.append(note)
             logger.error(f"{log_prefix} {note}", exc_info=True)
             await playwright_utils.safe_screenshot(dashboard_page, self.settings, "search_perform_exception", common.sanitize_filename(search_term_primary))
             return False, "; ".join(search_notes)
-
+        
     async def search_and_open_case_page(self, dashboard_page: Page, case_name_for_search: str, case_number_for_db_id: str) -> Tuple[Optional[Page], str, Optional[str], Optional[str]]:
         log_prefix = f"[{case_name_for_search} / {case_number_for_db_id}]"
         search_notes_list: List[str] = []
@@ -467,12 +492,12 @@ class UnicourtHandler:
             logger.debug(f"[{case_identifier}] Finished scrolling. Extracting text from VOLUNTARY_DISMISSAL_DOCKET_TEXT_AREA: '{self.selectors.VOLUNTARY_DISMISSAL_DOCKET_TEXT_AREA}'")
             docket_area_locator = case_page.locator(self.selectors.VOLUNTARY_DISMISSAL_DOCKET_TEXT_AREA)
             docket_area_content = await docket_area_locator.inner_text(timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 500) # Using a shorter timeout as content should be loaded.
-            
-            if 'voluntary dismissal'.lower() in docket_area_content.lower():
-                logger.info(f"[{case_identifier}] 'voluntary dismissal' found on page (case-insensitive).")
+
+            if 'Order Granting Motion to Vacate'.lower() in docket_area_content.lower() or 'Notice of Voluntary Dismissal'.lower() in docket_area_content.lower():
+                logger.info(f"[{case_identifier}] 'Order Granting Motion to Vacate' or 'Notice of Voluntary Dismissal' found on page (case-insensitive).")
                 return True
-                
-            logger.info(f"[{case_identifier}] 'voluntary dismissal' NOT found on page.")
+
+            logger.info(f"[{case_identifier}] 'Order Granting Motion to Vacate' and 'Notice of Voluntary Dismissal' NOT found on page.")
             return False
 
         except PlaywrightTimeoutError as e:

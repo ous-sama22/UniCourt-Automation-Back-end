@@ -212,16 +212,14 @@ class CaseProcessorService:
                 logger.error(msg)
                 crud.update_case_status(self.db, case_id, db_models.CaseStatusEnum.SESSION_ERROR)
                 return
-            
-            # --- Phase 1: Get the Case Page ---
+              # --- Phase 1: Get the Case Page ---
             case_page, search_notes, unicourt_actual_name, unicourt_actual_number = \
                 await self.unicourt_handler.search_and_open_case_page(dashboard_page, case_name_for_search, case_number_for_db)
 
             if not case_page:
                 logger.warning(f"[{case_number_for_db}] Failed to open Unicourt case page. Search notes: {search_notes}")
-                final_status_to_set = db_models.CaseStatusEnum.CASE_NOT_FOUND_ON_UNICOURT
-                crud.update_case_status(self.db, case_id, final_status_to_set)
-                return            
+                final_case_status = db_models.CaseStatusEnum.CASE_NOT_FOUND_ON_UNICOURT
+                return
             
             crud.update_case_details_from_unicourt_page(
                 self.db, case_id, 
@@ -356,14 +354,13 @@ class CaseProcessorService:
                     self._update_doc_summary_status(case_db_obj, skipped_doc_info.original_title, skipped_doc_info.unicourt_doc_key, db_models.DocumentProcessingStatusEnum.SKIPPED_PROCESSING_NOT_NEEDED, "Skipped (LLM); loop ended early or all info found by prior docs.")
 
             # --- Final Case Status Determination ---
-            logger.debug(f"[{case_number_for_db}] Final check of processed_documents_summary before determining case status: {case_db_obj.processed_documents_summary}")
-
+            logger.debug(f"[{case_number_for_db}] Final check of processed_documents_summary before determining case status: {case_db_obj.processed_documents_summary}")            
             has_doc_processing_errors = False
             if case_db_obj.processed_documents_summary: 
                 for s_item in case_db_obj.processed_documents_summary:
                     doc_type_in_summary = self._doc_type_from_summary(s_item)
                     status_in_summary = s_item.get("status")
-
+                    
                     if doc_type_in_summary in [db_models.DocumentTypeEnum.FINAL_JUDGMENT, db_models.DocumentTypeEnum.COMPLAINT]:
                         if status_in_summary not in [
                             db_models.DocumentProcessingStatusEnum.LLM_EXTRACTION_SUCCESS.value,
@@ -371,9 +368,12 @@ class CaseProcessorService:
                             db_models.DocumentProcessingStatusEnum.SKIPPED_PROCESSING_NOT_NEEDED.value,
                             db_models.DocumentProcessingStatusEnum.SKIPPED_REQUIRES_PAYMENT.value,
                         ]:
-                            logger.warning(f"[{case_number_for_db}] Relevant document '{s_item.get('document_name')}' has non-final/error status: {status_in_summary}")
+                            if status_in_summary == db_models.DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING.value:
+                                logger.error(f"[{case_number_for_db}] CRITICAL: Document '{s_item.get('document_name')}' has IDENTIFIED_FOR_PROCESSING status - this should never happen as a final status!")
+                            else:
+                                logger.warning(f"[{case_number_for_db}] Relevant document '{s_item.get('document_name')}' has non-final/error status: {status_in_summary}")
                             has_doc_processing_errors = True
-                            break 
+                            break
             elif llm_bundle_docs: # llm_bundle_docs had items, but final summary is empty/None. This is an error.
                  logger.warning(f"[{case_number_for_db}] llm_bundle_docs had items, but final processed_documents_summary is empty. Marking as error.")
                  has_doc_processing_errors = True

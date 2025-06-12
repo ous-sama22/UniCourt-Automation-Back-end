@@ -21,6 +21,12 @@ def get_all_cases(db: Session) -> List[db_models.Case]:
 def get_case_by_id(db: Session, case_id: int) -> Optional[db_models.Case]:
     return db.query(db_models.Case).filter(db_models.Case.id == case_id).first()
 
+def get_cases_by_ids(db: Session, case_ids: List[int]) -> List[db_models.Case]:
+    """Get multiple cases by their IDs."""
+    if not case_ids:
+        return []
+    return db.query(db_models.Case).filter(db_models.Case.id.in_(case_ids)).all()
+
 def create_case(db: Session, case_data: api_models.CaseSubmitDetail) -> db_models.Case:
     db_case = db_models.Case(
         case_number=case_data.case_number_for_db_id.strip(),

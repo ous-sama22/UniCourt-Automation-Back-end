@@ -824,8 +824,7 @@ class UnicourtHandler:
                         all_loading_indicators = case_page.locator(self.selectors.PAID_DOC_ORDER_LOADING_INDICATOR_SELECTOR)
                         logger.debug(f"[{case_identifier}] Paid: PAID_DOC_ORDER_LOADING_INDICATOR_SELECTOR count: {await all_loading_indicators.count()}")
                         expected_count = len(chunk_to_order)
-                        
-                        # First wait for all indicators to appear
+                          # First wait for all indicators to appear
                         try:
                             timeout_ms = self.settings.SHORT_TIMEOUT_SECONDS * 1000
                             while (await all_loading_indicators.count()) < expected_count and timeout_ms > 0:
@@ -833,8 +832,18 @@ class UnicourtHandler:
                                 timeout_ms -= 100
                             if timeout_ms <= 0:
                                 logger.error(f"[{case_identifier}] Timeout waiting for all {expected_count} loading indicators to appear")
+                                # Mark docs as failed if loading indicators don't appear
+                                for doc_info_to_order in chunk_to_order:
+                                    if doc_info_to_order.processing_status == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING:
+                                        doc_info_to_order.processing_status = DocumentProcessingStatusEnum.ORDERING_FAILED
+                                        doc_info_to_order.processing_notes = "Loading indicators failed to appear."
                         except Exception as e:
                             logger.error(f"[{case_identifier}] Error waiting for loading indicators to appear: {e}")
+                            # Mark docs as failed if there's an exception
+                            for doc_info_to_order in chunk_to_order:
+                                if doc_info_to_order.processing_status == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING:
+                                    doc_info_to_order.processing_status = DocumentProcessingStatusEnum.ORDERING_FAILED
+                                    doc_info_to_order.processing_notes = f"Exception waiting for loading indicators: {str(e)}"
 
                         logger.debug(f"[{case_identifier}] Paid: Waiting for {expected_count}/{await all_loading_indicators.count()} loading indicators to disappear after order click.")
 
@@ -864,15 +873,21 @@ class UnicourtHandler:
                         if doc_info.processing_status == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING: # Only if not already failed
                             doc_info.processing_status = DocumentProcessingStatusEnum.ORDERING_FAILED
                             doc_info.processing_notes = "Global order failure message observed."
-                
-                # Add summary for docs attempted to be ordered from paid section
+                  # Add summary for docs attempted to be ordered from paid section
                 # Their actual download will happen if they appear in CrowdSourced.
                 # Here, we record the outcome of the *ordering attempt*.
                 for doc_info in docs_to_order_from_paid:
+                    # Ensure no document is left in IDENTIFIED_FOR_PROCESSING status
+                    final_status = doc_info.processing_status
+                    if final_status == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING:
+                        logger.warning(f"[{case_identifier}] Paid doc '{doc_info.original_title}' still in IDENTIFIED_FOR_PROCESSING status. Marking as ORDERING_FAILED.")
+                        final_status = DocumentProcessingStatusEnum.ORDERING_FAILED
+                        doc_info.processing_notes = "Document was not properly processed during ordering phase."
+                    
                     processed_doc_summaries.append({
                         "document_name": doc_info.original_title,
                         "unicourt_doc_key": None, # Key not known yet
-                        "status": doc_info.processing_status.value, # Reflects order attempt outcome
+                        "status": final_status.value, # Reflects order attempt outcome
                         "notes": doc_info.processing_notes
                     })
         else:
@@ -946,8 +961,7 @@ class UnicourtHandler:
                             "status": doc_processing_status.value,
                             "notes": dl_notes
                         })
-                    await common.random_delay(0.5, 1.5, f"after processing crowdsourced doc '{doc_original_title}'")
-
+                    await common.random_delay(0.5, 1.5, f"after processing crowdsourced doc '{doc_original_title}'")                
                 except Exception as e_cs_row:
                     logger.error(f"[{case_identifier}] CrowdSourced: Error processing row ('{doc_original_title}'): {e_cs_row}")
                     processed_doc_summaries.append({
@@ -959,8 +973,20 @@ class UnicourtHandler:
         else:
             logger.info(f"[{case_identifier}] 'CrowdSourced Library' section not found or not visible.")
             await playwright_utils.safe_screenshot(case_page, self.settings, "docs_tab_crowdsourced_section_not_found", case_identifier)
-
+        
         if not llm_processing_bundle and not any(s["status"] == DocumentProcessingStatusEnum.SKIPPED_REQUIRES_PAYMENT.value for s in processed_doc_summaries):
-             logger.warning(f"[{case_identifier}] No relevant documents (FJ/Complaint) were successfully downloaded or marked as requiring payment.")
+            logger.warning(f"[{case_identifier}] No relevant documents (FJ/Complaint) were successfully downloaded or marked as requiring payment.")
+        
+        # Final safeguard: Ensure no documents are left in IDENTIFIED_FOR_PROCESSING status
+        identified_count = 0
+        for summary_item in processed_doc_summaries:
+            if summary_item["status"] == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING.value:
+                identified_count += 1
+                logger.warning(f"[{case_identifier}] Document '{summary_item['document_name']}' (Key: {summary_item.get('unicourt_doc_key', 'None')}) was left in IDENTIFIED_FOR_PROCESSING status. Marking as GENERIC_PROCESSING_ERROR.")
+                summary_item["status"] = DocumentProcessingStatusEnum.GENERIC_PROCESSING_ERROR.value
+                summary_item["notes"] = "Document was not properly processed through the pipeline and remained in initial status."
+        
+        if identified_count > 0:
+            logger.warning(f"[{case_identifier}] Fixed {identified_count} documents that were left in IDENTIFIED_FOR_PROCESSING status.")
         
         return llm_processing_bundle, processed_doc_summaries

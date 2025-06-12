@@ -84,7 +84,13 @@ async def submit_cases_for_processing(
     deleted_and_resubmitted_count = 0
     skipped_active_count = 0
 
-    current_queue_case_numbers = [item[1].case_number for item in list(request.app.state.case_processing_queue._queue)]
+    # Get case numbers currently in queue by fetching case IDs and querying the database
+    queue_case_ids = [item[0] for item in list(request.app.state.case_processing_queue._queue)]
+    current_queue_case_numbers = []
+    if queue_case_ids:
+        queue_cases = crud.get_cases_by_ids(db, queue_case_ids)
+        current_queue_case_numbers = [case.case_number for case in queue_cases]
+    
     async with request.app.state.active_cases_lock:
         current_active_case_numbers = set(request.app.state.actively_processing_cases)
 
@@ -147,13 +153,18 @@ def _get_case_status_or_data_internal(
     case_number_for_db_id: str,
     db: Session,
     request: Request 
-) -> api_models.CaseStatusResponseItem:
-    
+) -> api_models.CaseStatusResponseItem:    
     db_case = crud.get_case_by_case_number(db, case_number_for_db_id)
 
     if db_case:
         if db_case.status == db_models.CaseStatusEnum.QUEUED:
-             current_queue_case_numbers = [item[1].case_number for item in list(request.app.state.case_processing_queue._queue)]
+             # Get case numbers currently in queue by fetching case IDs and querying the database
+             queue_case_ids = [item[0] for item in list(request.app.state.case_processing_queue._queue)]
+             current_queue_case_numbers = []
+             if queue_case_ids:
+                 from app.db import crud
+                 queue_cases = crud.get_cases_by_ids(db, queue_case_ids)
+                 current_queue_case_numbers = [case.case_number for case in queue_cases]
              if case_number_for_db_id in current_queue_case_numbers:
                  return api_models.CaseStatusResponseItem(case_number_for_db_id=case_number_for_db_id, status="Queued", message="Case is in the processing queue.")
         
@@ -165,12 +176,17 @@ def _get_case_status_or_data_internal(
         return api_models.CaseStatusResponseItem(
             case_number_for_db_id=case_number_for_db_id,
             status=db_case.status, # Directly use the enum string value
-            message=f"Current status from database.", # Generic message
-            data=_db_case_to_response(db_case)
+            message=f"Current status from database.", # Generic message            data=_db_case_to_response(db_case)
         )
-    else: 
+    else:
         # Check queue/active even if not in DB (e.g. race condition on submit)
-        current_queue_case_numbers = [item[1].case_number for item in list(request.app.state.case_processing_queue._queue)]
+        # Get case numbers currently in queue by fetching case IDs and querying the database
+        queue_case_ids = [item[0] for item in list(request.app.state.case_processing_queue._queue)]
+        current_queue_case_numbers = []
+        if queue_case_ids:
+            from app.db import crud
+            queue_cases = crud.get_cases_by_ids(db, queue_case_ids)
+            current_queue_case_numbers = [case.case_number for case in queue_cases]
         if case_number_for_db_id in current_queue_case_numbers:
             return api_models.CaseStatusResponseItem(case_number_for_db_id=case_number_for_db_id, status="Queued", message="Case is in processing queue (DB entry may be pending full processing).")
         if case_number_for_db_id in request.app.state.actively_processing_cases:

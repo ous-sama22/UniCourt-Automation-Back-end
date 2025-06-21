@@ -11,12 +11,14 @@ from app.models_api import cases as api_models
 from app.api.deps import get_db, get_write_api_key, get_read_api_key, get_current_settings
 from app.core.config import AppSettings
 from app.utils.common import sanitize_filename
+from app.db import crud
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 def _db_case_to_response(db_case: db_models.Case) -> api_models.CaseDetailResponse:
+    from app.db import crud
     processed_docs_summary_resp = []
     if db_case.processed_documents_summary: # Should be a list of dicts
         for summary_item_db in db_case.processed_documents_summary:
@@ -155,7 +157,8 @@ def _get_case_status_or_data_internal(
     case_number_for_db_id: str,
     db: Session,
     request: Request 
-) -> api_models.CaseStatusResponseItem:    
+) -> api_models.CaseStatusResponseItem:  
+    from app.db import crud  
     db_case = crud.get_case_by_case_number(db, case_number_for_db_id)
 
     if db_case:
@@ -164,9 +167,9 @@ def _get_case_status_or_data_internal(
              queue_case_ids = [item[0] for item in list(request.app.state.case_processing_queue._queue)]
              current_queue_case_numbers = []
              if queue_case_ids:
-                 from app.db import crud
-                 queue_cases = crud.get_cases_by_ids(db, queue_case_ids)
-                 current_queue_case_numbers = [case.case_number for case in queue_cases]
+                
+                queue_cases = crud.get_cases_by_ids(db, queue_case_ids)
+                current_queue_case_numbers = [case.case_number for case in queue_cases]
              if case_number_for_db_id in current_queue_case_numbers:
                  return api_models.CaseStatusResponseItem(case_number_for_db_id=case_number_for_db_id, status="Queued", message="Case is in the processing queue.")
         

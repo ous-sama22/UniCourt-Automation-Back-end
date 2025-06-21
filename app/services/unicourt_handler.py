@@ -655,6 +655,8 @@ class UnicourtHandler:
                 prospective_filename = f"{base_name}_{counter}{final_ext}"
                 save_path = os.path.join(temp_case_download_path, prospective_filename)
 
+            # Ensure the directory exists before saving the file
+            os.makedirs(temp_case_download_path, exist_ok=True)
             await download_event.save_as(save_path)
             notes = f"Downloaded '{doc_title}' as '{os.path.basename(save_path)}'."
             logger.info(f"[{case_identifier}] CrowdSourced SUCCESS: {notes}")

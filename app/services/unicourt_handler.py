@@ -854,10 +854,20 @@ class UnicourtHandler:
                                 state="hidden", 
                                 timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000 * 2
                             )
-                            logger.info(f"[{case_identifier}] Paid: All loading indicators disappeared after order click. Processing to download in CrowdSourced section...")
+                            logger.info(f"[{case_identifier}] Paid: All loading indicators disappeared after order click. Marking docs as ORDERING_COMPLETED.")
+                            # Mark successfully ordered documents as ORDERING_COMPLETED
+                            for doc_info_to_order in chunk_to_order:
+                                if doc_info_to_order.processing_status == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING:
+                                    doc_info_to_order.processing_status = DocumentProcessingStatusEnum.ORDERING_COMPLETED
+                                    doc_info_to_order.processing_notes = "Document successfully ordered and will be processed for download."
                         except Exception as e:
                             logger.error(f"[{case_identifier}] Error waiting for loading indicators to disappear: {e}")
                             playwright_utils.safe_screenshot(case_page, self.settings, "paid_docs_order_loading_timeout", case_identifier)
+                            # Mark docs as failed if indicators don't disappear
+                            for doc_info_to_order in chunk_to_order:
+                                if doc_info_to_order.processing_status == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING:
+                                    doc_info_to_order.processing_status = DocumentProcessingStatusEnum.ORDERING_FAILED
+                                    doc_info_to_order.processing_notes = f"Loading indicators timeout: {str(e)}"
                         num_ordered_successfully_estimate += len(chunk_to_order) # Rough estimate
                     else:
                         logger.error(f"[{case_identifier}] Paid: Order Documents button not available for chunk. Marking docs in chunk as failed.")
@@ -872,8 +882,8 @@ class UnicourtHandler:
                     for doc_info in docs_to_order_from_paid:
                         if doc_info.processing_status == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING: # Only if not already failed
                             doc_info.processing_status = DocumentProcessingStatusEnum.ORDERING_FAILED
-                            doc_info.processing_notes = "Global order failure message observed."
-                  # Add summary for docs attempted to be ordered from paid section
+                            doc_info.processing_notes = "Global order failure message observed."                  
+                # Add summary for docs attempted to be ordered from paid section
                 # Their actual download will happen if they appear in CrowdSourced.
                 # Here, we record the outcome of the *ordering attempt*.
                 for doc_info in docs_to_order_from_paid:
@@ -976,17 +986,24 @@ class UnicourtHandler:
         
         if not llm_processing_bundle and not any(s["status"] == DocumentProcessingStatusEnum.SKIPPED_REQUIRES_PAYMENT.value for s in processed_doc_summaries):
             logger.warning(f"[{case_identifier}] No relevant documents (FJ/Complaint) were successfully downloaded or marked as requiring payment.")
-        
-        # Final safeguard: Ensure no documents are left in IDENTIFIED_FOR_PROCESSING status
+          # Final safeguard: Ensure no documents are left in IDENTIFIED_FOR_PROCESSING or ORDERING_COMPLETED status
         identified_count = 0
+        ordering_completed_count = 0
         for summary_item in processed_doc_summaries:
             if summary_item["status"] == DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING.value:
                 identified_count += 1
-                logger.warning(f"[{case_identifier}] Document '{summary_item['document_name']}' (Key: {summary_item.get('unicourt_doc_key', 'None')}) was left in IDENTIFIED_FOR_PROCESSING status. Marking as GENERIC_PROCESSING_ERROR.")
-                summary_item["status"] = DocumentProcessingStatusEnum.GENERIC_PROCESSING_ERROR.value
-                summary_item["notes"] = "Document was not properly processed through the pipeline and remained in initial status."
+                logger.warning(f"[{case_identifier}] Document '{summary_item['document_name']}' (Key: {summary_item.get('unicourt_doc_key', 'None')}) was left in IDENTIFIED_FOR_PROCESSING status. Marking as ORDERING_FAILED.")
+                summary_item["status"] = DocumentProcessingStatusEnum.ORDERING_FAILED.value
+                summary_item["notes"] = "Document was not properly processed through the ordering phase."
+            elif summary_item["status"] == DocumentProcessingStatusEnum.ORDERING_COMPLETED.value:
+                ordering_completed_count += 1
+                logger.warning(f"[{case_identifier}] Document '{summary_item['document_name']}' (Key: {summary_item.get('unicourt_doc_key', 'None')}) was left in ORDERING_COMPLETED status. Marking as ORDERING_FAILED.")
+                summary_item["status"] = DocumentProcessingStatusEnum.ORDERING_FAILED.value
+                summary_item["notes"] = "Document was ordered successfully but failed to appear in CrowdSourced section for download."
         
         if identified_count > 0:
             logger.warning(f"[{case_identifier}] Fixed {identified_count} documents that were left in IDENTIFIED_FOR_PROCESSING status.")
+        if ordering_completed_count > 0:
+            logger.warning(f"[{case_identifier}] Fixed {ordering_completed_count} documents that were left in ORDERING_COMPLETED status.")
         
         return llm_processing_bundle, processed_doc_summaries

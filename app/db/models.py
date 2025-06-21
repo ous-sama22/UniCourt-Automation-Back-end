@@ -26,6 +26,7 @@ class DocumentTypeEnum(str, enum.Enum):
 class DocumentProcessingStatusEnum(str, enum.Enum):
     IDENTIFIED_FOR_PROCESSING = "Identified_For_Processing"
     SKIPPED_REQUIRES_PAYMENT = "Retrieval_Fee"
+    ORDERING_COMPLETED = "Ordering_Completed" # Intermediate state after successful ordering, before download
     ORDERING_FAILED = "Ordering_Failed" # Covers explicit per-doc failure or link not appearing post-order
     DOWNLOAD_SUCCESS = "Download_Success" # Intermediate state for docs that go to LLM
     DOWNLOAD_FAILED = "Download_Failed"

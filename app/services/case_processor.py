@@ -382,6 +382,8 @@ class CaseProcessorService:
                         ]:
                             if status_in_summary == db_models.DocumentProcessingStatusEnum.IDENTIFIED_FOR_PROCESSING.value:
                                 logger.error(f"[{case_number_for_db}] CRITICAL: Document '{s_item.get('document_name')}' has IDENTIFIED_FOR_PROCESSING status - this should never happen as a final status!")
+                            elif status_in_summary == db_models.DocumentProcessingStatusEnum.ORDERING_COMPLETED.value:
+                                logger.error(f"[{case_number_for_db}] CRITICAL: Document '{s_item.get('document_name')}' has ORDERING_COMPLETED status - this should never happen as a final status!")
                             else:
                                 logger.warning(f"[{case_number_for_db}] Relevant document '{s_item.get('document_name')}' has non-final/error status: {status_in_summary}")
                             has_doc_processing_errors = True

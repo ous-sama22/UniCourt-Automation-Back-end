@@ -145,7 +145,7 @@ class CaseProcessorService:
         case_name_for_search = case_obj_from_queue.case_name_for_search
         input_creditor_name = case_obj_from_queue.input_creditor_name
         is_business = case_obj_from_queue.is_business
-        creditor_type = db_models.CreditorTypeEnum(case_obj_from_queue.creditor_type) # Convert back to Enum
+        creditor_type = case_obj_from_queue.creditor_type
 
         logger.info(f"Starting processing for case_id: {case_id}, DB_Key_Num: {case_number_for_db}")
           # Case is already updated for QUEUED status by API. Now set to PROCESSING.

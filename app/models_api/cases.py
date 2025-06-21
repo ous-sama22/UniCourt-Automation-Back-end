@@ -1,14 +1,14 @@
 # app/models_api/cases.py
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from app.db.models import CaseStatusEnum, CreditorTypeEnum # For consistency
+from app.db.models import CaseStatusEnum
 
 class CaseSubmitDetail(BaseModel):
     case_number_for_db_id: str = Field(..., min_length=1, description="The case number to be used as the primary key in the database.")
     case_name_for_search: str = Field(..., min_length=1, description="The case name to primarily use for searching on Unicourt.")
     input_creditor_name: str = Field(..., min_length=1, description="Name of the creditor for LLM focus and party identification.")
     is_business: bool = Field(..., description="Indicates if the creditor is a business entity.")
-    creditor_type: CreditorTypeEnum = Field(..., description="Type of the creditor (Plaintiff or Defendant).")
+    creditor_type: str = Field(..., description="Type of the creditor.")
 
 class CaseSubmitRequest(BaseModel):
     cases: List[CaseSubmitDetail] = Field(..., min_items=1)
@@ -40,7 +40,7 @@ class CaseDetailResponse(BaseModel):
     case_name_for_search: str
     input_creditor_name: str
     is_business: bool
-    creditor_type: str # String representation of CreditorTypeEnum
+    creditor_type: str # String
     
     unicourt_case_name_on_page: Optional[str] = None
     unicourt_actual_case_number_on_page: Optional[str] = None

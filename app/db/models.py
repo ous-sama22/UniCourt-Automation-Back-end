@@ -17,10 +17,6 @@ class CaseStatusEnum(str, enum.Enum):
     SESSION_ERROR = "Failed_Initial_Login_Or_Session" # Replaces generic "Failed_Initial_Login_Or_Session"
     WORKER_ERROR = "Generic_Case_Error" # Replaces specific "Worker_Unhandled_Error"
 
-class CreditorTypeEnum(str, enum.Enum):
-    PLAINTIFF = "Plaintiff"
-    DEFENDANT = "Defendant"
-
 # For in-memory categorization and processed_documents_summary status
 class DocumentTypeEnum(str, enum.Enum):
     FINAL_JUDGMENT = "FJ"
@@ -53,7 +49,7 @@ class Case(Base):
     case_name_for_search = Column(String, nullable=False)
     input_creditor_name = Column(String, nullable=False)
     is_business = Column(Boolean, nullable=False)
-    creditor_type = Column(String, nullable=False) # Store as string from CreditorTypeEnum
+    creditor_type = Column(String, nullable=False)
 
     # --- Details Fetched from Unicourt (Case Level) ---
     unicourt_case_name_on_page = Column(String, nullable=True)

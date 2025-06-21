@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from playwright.async_api import Playwright, Page, BrowserContext, Browser, TimeoutError as PlaywrightTimeoutError, expect, Download, Locator
 
 from app.core.config import AppSettings, UnicourtSelectors
-from app.db.models import CreditorTypeEnum, DocumentTypeEnum, DocumentProcessingStatusEnum # Enums for logic
+from app.db.models import DocumentTypeEnum, DocumentProcessingStatusEnum # Enums for logic
 from app.utils import playwright_utils, common 
 
 logger = logging.getLogger(__name__)
@@ -511,10 +511,10 @@ class UnicourtHandler:
             return False
         
     async def extract_party_names_from_parties_tab(
-        self, case_page: Page, target_creditor_type: CreditorTypeEnum, input_creditor_name: str, case_identifier: str
+        self, case_page: Page, target_creditor_type: str, input_creditor_name: str, case_identifier: str
     ) -> List[str]:
         """Navigates to Parties tab and extracts names of parties matching target_creditor_type, excluding input_creditor_name."""
-        logger.info(f"[{case_identifier}] Extracting party names from 'Parties' tab for type '{target_creditor_type.value}'.")
+        logger.info(f"[{case_identifier}] Extracting party names from 'Parties' tab for type '{target_creditor_type}'.")
         associated_party_names: List[str] = []
         try:
             parties_tab_button = case_page.locator(self.selectors.PARTIES_TAB_BUTTON)

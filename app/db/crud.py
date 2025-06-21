@@ -33,7 +33,7 @@ def create_case(db: Session, case_data: api_models.CaseSubmitDetail) -> db_model
         case_name_for_search=case_data.case_name_for_search.strip(),
         input_creditor_name=case_data.input_creditor_name.strip(),
         is_business=case_data.is_business,
-        creditor_type=case_data.creditor_type.value, # Store enum value
+        creditor_type=case_data.creditor_type,
         status=db_models.CaseStatusEnum.QUEUED,
         last_submitted_at=datetime.utcnow(),
         processed_documents_summary=[] # Initialize as empty list

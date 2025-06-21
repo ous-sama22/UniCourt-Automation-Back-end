@@ -543,7 +543,7 @@ class UnicourtHandler:
                     party_type_str = common.clean_html_text(await party_type_element.inner_text(timeout=2000))
 
                     # Normalize party_type_str for comparison (e.g. "Plaintiff", "Defendant")
-                    if target_creditor_type.value.lower() in party_type_str.lower():
+                    if target_creditor_type.lower() in party_type_str.lower():
                         # Exclude the input creditor name itself
                         if input_creditor_name.lower().strip() not in party_name.lower().strip():
                             associated_party_names.append(party_name)
@@ -617,12 +617,12 @@ class UnicourtHandler:
                 logger.info(f"[{case_identifier}] CrowdSourced: No unsupported file message. Expecting direct/automatic download for '{doc_title}'.")
                 
                 try:
-                    async with new_doc_viewer_page.expect_download(timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000) as download_promise_direct:
+                    async with new_doc_viewer_page.expect_download(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000 * 0.5 * 0.5) as download_promise_direct:
                         download_event = await download_promise_direct.value
                 except PlaywrightTimeoutError:
                     logger.warning(f"[{case_identifier}] CrowdSourced: Timeout waiting for download event for '{doc_title}'. Trying to refreash the page.")
                     await new_doc_viewer_page.reload(wait_until="domcontentloaded", timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000)
-                    async with new_doc_viewer_page.expect_download(timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 1000 * 1.5) as download_promise_direct:
+                    async with new_doc_viewer_page.expect_download(timeout=self.settings.SHORT_TIMEOUT_SECONDS * 1000 * 0.5 * 0.5) as download_promise_direct:
                         download_event = await download_promise_direct.value
 
             logger.info(f"[{case_identifier}] CrowdSourced: Download event captured for '{doc_title}'.")

@@ -73,6 +73,7 @@ class CaseProcessorService:
             doc_full_path=trans_doc_info.temp_local_path,
             input_creditor_name=case_db_obj.input_creditor_name,
             is_business=case_db_obj.is_business,
+            creditor_type=case_db_obj.creditor_type,
             target_associated_party_names=current_target_party_names_for_llm_pass, # Pass only those still needed
             info_to_extract_for_doc=info_to_extract_for_this_doc_pass, # What to look for in this doc
             max_images_per_llm_call=self.settings.MAX_IMAGES_PER_LLM_CALL, # Add to AppSettings

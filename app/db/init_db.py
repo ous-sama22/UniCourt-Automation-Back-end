@@ -26,14 +26,17 @@ def run_migrations():
 def init_db():
     logger.info("Initializing database...")
     try:
-        # First, create tables if they don't exist
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created/verified successfully.")
-        
-        # Then run any pending migrations
+        # First, run migrations to ensure all columns exist
         migrations_success = run_migrations()
         if not migrations_success:
-            raise Exception("Database migrations failed")
+            logger.warning("Migrations failed, attempting to create tables from scratch...")
+            # If migrations fail, try to create tables normally
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables created from model definitions.")
+        else:
+            # Also run create_all as a safety net to ensure any new tables are created
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables verified after migrations.")
             
         logger.info("Database initialization completed successfully.")
         

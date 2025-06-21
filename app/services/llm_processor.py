@@ -88,7 +88,8 @@ class LLMProcessor:
         input_creditor_name: str,
         is_business: bool,
         target_associated_party_names: List[str], # Names for whom addresses are still needed
-        info_needed: Dict[str, bool] # {"creditor_address": True, "reg_state": False, "original_creditor_name": True ...}
+        info_needed: Dict[str, bool], # {"creditor_address": True, "reg_state": False, "original_creditor_name": True ...}
+        creditor_type: str
     ) -> str:
         prompt_parts = [
             f"You are an expert legal assistant analyzing a court document (provided as images). The primary creditor of interest is '{input_creditor_name}'."
@@ -117,7 +118,7 @@ class LLMProcessor:
         
         if info_needed.get("final_judgment_awarded"):
             prompt_parts.append(
-                f"- **Final Judgment Awarded to Listed Creditor**: Determine if the final judgment was awarded to '{input_creditor_name}' (or its variation found in the document). Output 'Y' if the judgment was awarded to the creditor, 'N' if it was not, or null if this cannot be determined from this document. Look for text indicating the creditor is due money or awarded a judgment."
+                f"- **Final Judgment Awarded to Listed Creditor**: Determine if the final judgment was awarded to our '{creditor_type}', '{input_creditor_name}' (or its variation/attorney found in the document). Output 'Y' if the judgment was awarded to the creditor, 'N' if it was not, or null if this cannot be determined from this document. Look for text indicating the creditor is due money or awarded a judgment."
             )
         
         prompt_parts.append(
@@ -244,6 +245,7 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
         all_images_base64: List[str],
         input_creditor_name: str,
         is_business: bool,
+        creditor_type: str,
         target_associated_party_names: List[str],
         info_to_extract_for_doc: Dict[str, bool], # What's needed for *this document's current pass*
         max_images_per_llm_call: int,
@@ -277,7 +279,8 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
             input_creditor_name, 
             is_business, 
             target_associated_party_names, # All targets for the case
-            info_to_extract_for_doc # What this document pass is trying to find
+            info_to_extract_for_doc, # What this document pass is trying to find
+            creditor_type
         )
 
         for i in range(num_batches):
@@ -352,6 +355,7 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
         doc_full_path: str,
         input_creditor_name: str,
         is_business: bool,
+        creditor_type: str,
         target_associated_party_names: List[str], # For the whole case
         info_to_extract_for_doc: Dict[str, bool], # Specifically for this document pass
         max_images_per_llm_call: int,
@@ -369,7 +373,8 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
         llm_data, llm_api_notes = await self.extract_info_from_document_images(
             images_base64, 
             input_creditor_name, 
-            is_business, 
+            is_business,
+            creditor_type, 
             target_associated_party_names,
             info_to_extract_for_doc,
             max_images_per_llm_call=max_images_per_llm_call,

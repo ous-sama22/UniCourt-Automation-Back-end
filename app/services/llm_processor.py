@@ -32,6 +32,7 @@ class LLMResponseData(BaseModel):
     # Use the new inner model for better validation and clarity
     associated_parties: List[AssociatedPartyLLMDetail] = [] 
     creditor_registration_state: Optional[str] = None
+    final_judgment_awarded_to_creditor: Optional[str] = None  # 'Y' or 'N'
 
 
 class LLMProcessor:
@@ -114,6 +115,11 @@ class LLMProcessor:
                 f"- **Creditor Registration State**: Identify state of registration or incorporation for the {input_creditor_name} (if mentioned)."
             )
         
+        if info_needed.get("final_judgment_awarded"):
+            prompt_parts.append(
+                f"- **Final Judgment Awarded to Listed Creditor**: Determine if the final judgment was awarded to '{input_creditor_name}' (or its variation found in the document). Output 'Y' if the judgment was awarded to the creditor, 'N' if it was not, or null if this cannot be determined from this document. Look for text indicating the creditor is due money or awarded a judgment."
+            )
+        
         prompt_parts.append(
             "\nProvide the output STRICTLY in the following JSON format. Only return JSON without any surrounding text or markdown. If a specific piece of information is not found in THIS document, set its value to null (not 'Not Found' or any other string). For 'associated_parties', only include parties for whom an address was found in THIS document."
         )
@@ -135,7 +141,13 @@ class LLMProcessor:
         if is_business and info_needed.get("reg_state"):
             prompt_parts.append(
                 """
-                "\ncreditor_registration_state": "..."
+                "creditor_registration_state": "..."
+                """
+            )
+        if info_needed.get("final_judgment_awarded"):
+            prompt_parts.append(
+                """
+                "final_judgment_awarded_to_creditor": "..."
                 """
             )
         prompt_parts.append(

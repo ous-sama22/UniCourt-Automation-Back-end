@@ -31,16 +31,17 @@ class CaseProcessorService:
         found_original_creditor_name_for_case: bool,
         found_creditor_address_for_case: bool,
         found_reg_state_for_case: bool, 
+        found_final_judgment_awarded_for_case: bool,
         found_party_addresses_for_case: Dict[str, bool], 
         target_associated_party_names_for_case: List[str]
-    ) -> Tuple[Optional[LLMResponseData], str, bool, bool, bool, Dict[str,bool]]:
+    ) -> Tuple[Optional[LLMResponseData], str, bool, bool, bool, bool, Dict[str,bool]]:
         
         llm_api_notes = "LLM processing not attempted for document."
         llm_data: Optional[LLMResponseData] = None
 
         if not trans_doc_info.temp_local_path or not os.path.exists(trans_doc_info.temp_local_path):
             logger.error(f"[{case_db_obj.case_number}] LLM: File missing for '{trans_doc_info.original_title}' at '{trans_doc_info.temp_local_path}'.")
-            return None, "File missing for LLM.", found_original_creditor_name_for_case, found_creditor_address_for_case, found_reg_state_for_case, found_party_addresses_for_case
+            return None, "File missing for LLM.", found_original_creditor_name_for_case, found_creditor_address_for_case, found_reg_state_for_case, found_final_judgment_awarded_for_case, found_party_addresses_for_case
 
         # Determine what info is still needed for this LLM call based on overall case needs
         info_to_extract_for_this_doc_pass: Dict[str, bool] = {
@@ -50,7 +51,8 @@ class CaseProcessorService:
             # AND if there are parties whose addresses haven't been found yet.
             "associated_parties_addresses": self.settings.EXTRACT_ASSOCIATED_PARTY_ADDRESSES and \
                                             any(not found_party_addresses_for_case.get(name, False) for name in target_associated_party_names_for_case),
-            "reg_state": case_db_obj.is_business and not found_reg_state_for_case
+            "reg_state": case_db_obj.is_business and not found_reg_state_for_case,
+            "final_judgment_awarded": not found_final_judgment_awarded_for_case
         }
         
         current_target_party_names_for_llm_pass = [
@@ -64,7 +66,7 @@ class CaseProcessorService:
             logger.info(f"[{case_db_obj.case_number}] LLM: Skipping LLM for '{trans_doc_info.original_title}', {llm_api_notes}")
             # Return an empty LLMResponseData to signify no new data, but not an error.
             # The found flags remain unchanged as this doc didn't contribute new info.
-            return LLMResponseData(), llm_api_notes, found_original_creditor_name_for_case, found_creditor_address_for_case, found_reg_state_for_case, found_party_addresses_for_case
+            return LLMResponseData(), llm_api_notes, found_original_creditor_name_for_case, found_creditor_address_for_case, found_reg_state_for_case, found_final_judgment_awarded_for_case, found_party_addresses_for_case
 
         # Call the (renamed) method in LLMProcessor
         llm_data, llm_api_notes = await self.llm_processor.process_document_for_case_info(
@@ -85,7 +87,7 @@ class CaseProcessorService:
             if llm_data.original_creditor_name and not case_db_obj.original_creditor_name_from_doc:
                 case_db_obj.original_creditor_name_from_doc = llm_data.original_creditor_name
                 case_db_obj.original_creditor_name_source_doc_title = trans_doc_info.original_title
-                found_original_creditor_name_for_case = True # Update case-level flag
+                found_original_creditor_name_for_case = True # Update case-level flag                
                 db_changed = True
             
             if llm_data.creditor_address and not case_db_obj.creditor_address_from_doc:
@@ -98,6 +100,12 @@ class CaseProcessorService:
                 case_db_obj.creditor_registration_state_from_doc = llm_data.creditor_registration_state
                 case_db_obj.creditor_registration_state_source_doc_title = trans_doc_info.original_title
                 found_reg_state_for_case = True # Update case-level flag
+                db_changed = True
+
+            if llm_data.final_judgment_awarded_to_creditor and not case_db_obj.final_judgment_awarded_to_creditor:
+                case_db_obj.final_judgment_awarded_to_creditor = llm_data.final_judgment_awarded_to_creditor
+                case_db_obj.final_judgment_awarded_source_doc_title = trans_doc_info.original_title
+                found_final_judgment_awarded_for_case = True # Update case-level flag
                 db_changed = True
 
             if self.settings.EXTRACT_ASSOCIATED_PARTY_ADDRESSES and llm_data.associated_parties: # Check global setting
@@ -133,7 +141,7 @@ class CaseProcessorService:
                     logger.error(f"[{case_db_obj.case_number}] Error committing LLM updates to DB: {e_commit}")
                     self.db.rollback()
         
-        return llm_data, llm_api_notes, found_original_creditor_name_for_case, found_creditor_address_for_case, found_reg_state_for_case, found_party_addresses_for_case
+        return llm_data, llm_api_notes, found_original_creditor_name_for_case, found_creditor_address_for_case, found_reg_state_for_case, found_final_judgment_awarded_for_case, found_party_addresses_for_case
 
 
     async def process_single_case(
@@ -194,6 +202,7 @@ class CaseProcessorService:
         found_original_creditor_name_for_case: bool = bool(case_db_obj.original_creditor_name_from_doc)
         found_creditor_address_for_case: bool = bool(case_db_obj.creditor_address_from_doc)
         found_reg_state_for_case: bool = bool(case_db_obj.creditor_registration_state_from_doc) if case_db_obj.is_business else True # True if not business
+        found_final_judgment_awarded_for_case: bool = bool(case_db_obj.final_judgment_awarded_to_creditor)
         
         # For associated parties, from case_db_obj.associated_parties_data
         # Initialize found_party_addresses_for_case based on what's already in DB (if reprocessing an existing entry)
@@ -307,7 +316,8 @@ class CaseProcessorService:
                     found_original_creditor_name_for_case and
                     found_creditor_address_for_case and
                     (not case_db_obj.is_business or found_reg_state_for_case) and
-                    all_assoc_parties_found_for_case
+                    all_assoc_parties_found_for_case and
+                    found_final_judgment_awarded_for_case
                 )
 
                 if all_case_info_found_prior_to_this_doc:
@@ -319,13 +329,14 @@ class CaseProcessorService:
                 # If we reach here, some case-level info is still needed, so we process this document with LLM
                 returned_llm_data, llm_notes, \
                 found_original_creditor_name_for_case, found_creditor_address_for_case, \
-                found_reg_state_for_case, found_party_addresses_for_case = \
+                found_reg_state_for_case, found_final_judgment_awarded_for_case, found_party_addresses_for_case = \
                     await self._process_single_document_with_llm(
                         trans_doc_info,
                         case_db_obj, 
                         found_original_creditor_name_for_case,
                         found_creditor_address_for_case,
                         found_reg_state_for_case,
+                        found_final_judgment_awarded_for_case,
                         found_party_addresses_for_case,
                         target_associated_party_names
                     )
@@ -386,6 +397,7 @@ class CaseProcessorService:
                 all_essential_found = (
                     found_original_creditor_name_for_case and
                     found_creditor_address_for_case and
+                    found_final_judgment_awarded_for_case and
                     (not case_db_obj.is_business or found_reg_state_for_case) and
                     ( (not self.settings.EXTRACT_ASSOCIATED_PARTY_ADDRESSES or not target_associated_party_names) or \
                        all(found_party_addresses_for_case.get(name, False) for name in target_associated_party_names) )

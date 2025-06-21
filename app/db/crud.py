@@ -92,6 +92,8 @@ def update_case_extracted_data(
     associated_parties_data: Optional[List[Dict[str, str]]] = None, # e.g. [{"name": "...", "address": "...", "source_doc_title": "..."}]
     registration_state: Optional[str] = None,
     registration_state_source_title: Optional[str] = None,
+    final_judgment_awarded: Optional[str] = None,
+    final_judgment_awarded_source_title: Optional[str] = None,
 ) -> Optional[db_models.Case]:
     db_case = db.query(db_models.Case).filter(db_models.Case.id == case_id).first()
     if db_case:
@@ -110,6 +112,10 @@ def update_case_extracted_data(
         if registration_state is not None and not db_case.creditor_registration_state_from_doc: # Fill if empty
             db_case.creditor_registration_state_from_doc = registration_state
             db_case.creditor_registration_state_source_doc_title = registration_state_source_title
+        
+        if final_judgment_awarded is not None and not db_case.final_judgment_awarded_to_creditor: # Fill if empty
+            db_case.final_judgment_awarded_to_creditor = final_judgment_awarded
+            db_case.final_judgment_awarded_source_doc_title = final_judgment_awarded_source_title
         
         db.commit()
         db.refresh(db_case)

@@ -57,6 +57,8 @@ class CaseDetailResponse(BaseModel):
     associated_parties_data: List[AssociatedPartyData] = []
     creditor_registration_state_from_doc: Optional[str] = None
     creditor_registration_state_source_doc_title: Optional[str] = None
+    final_judgment_awarded_to_creditor: Optional[str] = None  # 'Y', 'N', or None
+    final_judgment_awarded_source_doc_title: Optional[str] = None
     processed_documents_summary: List[ProcessedDocumentSummaryItem] = []
 
     class Config:

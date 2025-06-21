@@ -75,6 +75,10 @@ class Case(Base):
     creditor_registration_state_from_doc = Column(String, nullable=True)
     creditor_registration_state_source_doc_title = Column(String, nullable=True)
 
+    # Final Judgment Awarded to Creditor (Y/N)
+    final_judgment_awarded_to_creditor = Column(String, nullable=True)  # 'Y', 'N', or None if not determined
+    final_judgment_awarded_source_doc_title = Column(String, nullable=True)
+
     # --- Summary of Transient Document Processing ---
     # Stores: [{"document_name": "Doc Title", "unicourt_doc_key": "key_or_null", "status": "DocProcessingStatus"}, ...]
     processed_documents_summary = Column(JSON, nullable=True)

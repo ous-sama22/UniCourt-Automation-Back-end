@@ -45,6 +45,7 @@ def main():
             print("The following columns have been added to your database:")
             print("  - final_judgment_awarded_to_creditor")
             print("  - final_judgment_awarded_source_doc_title")
+            print("  - final_judgment_awarded_to_creditor_context")
             print()
             print("Your existing data has been preserved.")
             print("You can now restart your application to use the new features.")

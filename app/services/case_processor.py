@@ -106,6 +106,7 @@ class CaseProcessorService:
             if llm_data.final_judgment_awarded_to_creditor and not case_db_obj.final_judgment_awarded_to_creditor:
                 case_db_obj.final_judgment_awarded_to_creditor = llm_data.final_judgment_awarded_to_creditor
                 case_db_obj.final_judgment_awarded_source_doc_title = trans_doc_info.original_title
+                case_db_obj.final_judgment_awarded_to_creditor_context = llm_data.final_judgment_awarded_to_creditor_context
                 found_final_judgment_awarded_for_case = True # Update case-level flag
                 db_changed = True
 

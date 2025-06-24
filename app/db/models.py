@@ -79,6 +79,7 @@ class Case(Base):
     # Final Judgment Awarded to Creditor (Y/N)
     final_judgment_awarded_to_creditor = Column(String, nullable=True)  # 'Y', 'N', or None if not determined
     final_judgment_awarded_source_doc_title = Column(String, nullable=True)
+    final_judgment_awarded_to_creditor_context = Column(Text, nullable=True)  # Context/phrase used to determine the judgment
 
     # --- Summary of Transient Document Processing ---
     # Stores: [{"document_name": "Doc Title", "unicourt_doc_key": "key_or_null", "status": "DocProcessingStatus"}, ...]

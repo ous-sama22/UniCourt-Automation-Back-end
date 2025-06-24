@@ -153,6 +153,7 @@ def restore_data(backup_data):
                     'associated_parties', 'associated_parties_data',
                     'creditor_registration_state_from_doc', 'creditor_registration_state_source_doc_title',
                     'final_judgment_awarded_to_creditor', 'final_judgment_awarded_source_doc_title',
+                    'final_judgment_awarded_to_creditor_context',
                     'processed_documents_summary'
                 ]
                 

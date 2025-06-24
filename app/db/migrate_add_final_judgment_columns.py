@@ -39,6 +39,7 @@ def migrate_add_final_judgment_columns():
         'creditor_registration_state_source_doc_title': 'VARCHAR',
         'final_judgment_awarded_to_creditor': 'VARCHAR',
         'final_judgment_awarded_source_doc_title': 'VARCHAR',
+        'final_judgment_awarded_to_creditor_context': 'TEXT',
         'processed_documents_summary': 'JSON'
     }
     
@@ -76,6 +77,7 @@ def migrate_add_final_judgment_columns():
                     creditor_registration_state_source_doc_title VARCHAR,
                     final_judgment_awarded_to_creditor VARCHAR,
                     final_judgment_awarded_source_doc_title VARCHAR,
+                    final_judgment_awarded_to_creditor_context TEXT,
                     processed_documents_summary JSON
                 )
                 """

@@ -33,6 +33,7 @@ class LLMResponseData(BaseModel):
     associated_parties: List[AssociatedPartyLLMDetail] = [] 
     creditor_registration_state: Optional[str] = None
     final_judgment_awarded_to_creditor: Optional[str] = None  # 'Y' or 'N'
+    final_judgment_awarded_to_creditor_context: Optional[str] = None  # Context/phrase used to determine the judgment
 
 
 class LLMProcessor:
@@ -118,7 +119,10 @@ class LLMProcessor:
         
         if info_needed.get("final_judgment_awarded"):
             prompt_parts.append(
-                f"- **Final Judgment Awarded to Listed Creditor**: Determine if the final judgment was awarded to our '{creditor_type}', '{input_creditor_name}' (or its variation/attorney found in the document). Output 'Y' if the judgment was awarded to the creditor, 'N' if it was not, or null if this cannot be determined from this document. Look for text indicating the creditor is due money or awarded a judgment."
+                f"- **Final Judgment Awarded to Listed Creditor**: Determine if the final judgment was awarded to our creditor type: '{creditor_type}', creditor name: '{input_creditor_name}' (or its variation or his/her attorney found in the document). Output 'Y' if the judgment was awarded to the creditor, 'N' if it was not, or null if this cannot be determined from this document. Look for text indicating the creditor is due money or awarded a judgment like: `Judgment is entered in favor of Plaintiff and against Defendants`, `The Court hereby orders and adjudges that Plaintiff shall recover from Defendants`, `It is ordered, adjudged, and decreed that judgment is entered against Defendants`, `The Court enters a Default Final Judgment in favor of the Plaintiff`, `Plaintiff is entitled to judgment as a matter of law` and similar phrases. If for example our ceditor is the defendant and you found this phrase in the document `The Court enters a Default Final Judgment in favor of the Plaintiff` then ouput 'N' because our creditor the defendant lost the case."
+            )
+            prompt_parts.append(
+                f"- **Final Judgment Context**: Provide the exact phrase or sentence from the document that you used to determine the final judgment decision above. This should be a direct quote from the document that supports your Y/N determination."
             )
         
         prompt_parts.append(
@@ -142,13 +146,14 @@ class LLMProcessor:
         if is_business and info_needed.get("reg_state"):
             prompt_parts.append(
                 """
-                "creditor_registration_state": "..."
+                "creditor_registration_state": "...",
                 """
             )
         if info_needed.get("final_judgment_awarded"):
             prompt_parts.append(
                 """
-                "final_judgment_awarded_to_creditor": "..."
+                "final_judgment_awarded_to_creditor": "...",
+                "final_judgment_awarded_to_creditor_context": "..."
                 """
             )
         prompt_parts.append(
@@ -160,6 +165,7 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
 
     def _strip_markdown_json(self, text: str) -> str:
         """Strips JSON markdown code fences and attempts to extract the first valid JSON object."""
+        logger.debug(f"RAW Response from LLM: ```{text}```")
         text = text.strip()
         if text.startswith("```json") and text.endswith("```"):
             text = text[len("```json"): -len("```")]
@@ -320,6 +326,10 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
                         aggregated_llm_data.creditor_address = batch_llm_data.creditor_address
                     if batch_llm_data.creditor_registration_state and not aggregated_llm_data.creditor_registration_state:
                         aggregated_llm_data.creditor_registration_state = batch_llm_data.creditor_registration_state
+                    if batch_llm_data.final_judgment_awarded_to_creditor and not aggregated_llm_data.final_judgment_awarded_to_creditor:
+                        aggregated_llm_data.final_judgment_awarded_to_creditor = batch_llm_data.final_judgment_awarded_to_creditor
+                    if batch_llm_data.final_judgment_awarded_to_creditor_context and not aggregated_llm_data.final_judgment_awarded_to_creditor_context:
+                        aggregated_llm_data.final_judgment_awarded_to_creditor_context = batch_llm_data.final_judgment_awarded_to_creditor_context
                     
                     # Merge associated parties, avoiding duplicates by name
                     existing_assoc_party_names = {p.name for p in aggregated_llm_data.associated_parties}
@@ -335,12 +345,13 @@ Ensure all string values are properly escaped within the JSON. If a top-level fi
                 logger.error(f"LLM processing failed for batch {i+1} after {max_llm_attempts_per_batch} attempts.")
                 # If any batch fails completely, we might return None for the whole document
                 # or return what was aggregated so far. For now, let's be strict.
-                return None, "; ".join(all_batch_notes)
-
+                return None, "; ".join(all_batch_notes)        
         # Check if any meaningful data was aggregated
         if not aggregated_llm_data.original_creditor_name and \
            not aggregated_llm_data.creditor_address and \
            not aggregated_llm_data.creditor_registration_state and \
+           not aggregated_llm_data.final_judgment_awarded_to_creditor and \
+           not aggregated_llm_data.final_judgment_awarded_to_creditor_context and \
            not aggregated_llm_data.associated_parties:
             if any("LLM call successful" in note for note in all_batch_notes): # LLM ran but found nothing
                  return aggregated_llm_data, "LLM processed all batches but found no requested data. Notes: " + "; ".join(all_batch_notes) # Return empty but valid LLMResponseData

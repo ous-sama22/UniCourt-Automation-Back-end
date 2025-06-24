@@ -64,9 +64,10 @@ def _db_case_to_response(db_case: db_models.Case) -> api_models.CaseDetailRespon
         associated_parties=db_case.associated_parties or [], # Handle None case
         associated_parties_data=assoc_parties_resp,
         creditor_registration_state_from_doc=db_case.creditor_registration_state_from_doc,
-        creditor_registration_state_source_doc_title=db_case.creditor_registration_state_source_doc_title,
+        creditor_registration_state_source_doc_title=db_case.creditor_registration_state_source_doc_title,        
         final_judgment_awarded_to_creditor = db_case.final_judgment_awarded_to_creditor,
         final_judgment_awarded_source_doc_title = db_case.final_judgment_awarded_source_doc_title,
+        final_judgment_awarded_to_creditor_context = db_case.final_judgment_awarded_to_creditor_context,
         processed_documents_summary=processed_docs_summary_resp
     )
 

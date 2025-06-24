@@ -94,6 +94,7 @@ def update_case_extracted_data(
     registration_state_source_title: Optional[str] = None,
     final_judgment_awarded: Optional[str] = None,
     final_judgment_awarded_source_title: Optional[str] = None,
+    final_judgment_awarded_context: Optional[str] = None,
 ) -> Optional[db_models.Case]:
     db_case = db.query(db_models.Case).filter(db_models.Case.id == case_id).first()
     if db_case:
@@ -116,6 +117,7 @@ def update_case_extracted_data(
         if final_judgment_awarded is not None and not db_case.final_judgment_awarded_to_creditor: # Fill if empty
             db_case.final_judgment_awarded_to_creditor = final_judgment_awarded
             db_case.final_judgment_awarded_source_doc_title = final_judgment_awarded_source_title
+            db_case.final_judgment_awarded_to_creditor_context = final_judgment_awarded_context
         
         db.commit()
         db.refresh(db_case)

@@ -59,6 +59,7 @@ class CaseDetailResponse(BaseModel):
     creditor_registration_state_source_doc_title: Optional[str] = None
     final_judgment_awarded_to_creditor: Optional[str] = None  # 'Y', 'N', or None
     final_judgment_awarded_source_doc_title: Optional[str] = None
+    final_judgment_awarded_to_creditor_context: Optional[str] = None  # Context/phrase used to determine the judgment
     processed_documents_summary: List[ProcessedDocumentSummaryItem] = []
 
     class Config:

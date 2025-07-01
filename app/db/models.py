@@ -11,7 +11,7 @@ class CaseStatusEnum(str, enum.Enum):
     COMPLETED_SUCCESSFULLY = "Completed_All_Data_Retrieved"
     COMPLETED_MISSING_DATA = "Completed_Missing_Data"
     COMPLETED_WITH_ERRORS = "Completed_With_Errors"
-    CASE_NOT_FOUND_ON_UNICOURT = "Case_Not_Found_On_Unicourt"
+    CASE_NOT_FOUND_ON_UNICOURT = "Case_Not_Found_By_Name_And_Number"
     VOLUNTARY_DISMISSAL_FOUND_SKIPPED = "Voluntary_Dismissal_Found_Skipped"
     NO_FJ_NO_COMPLAINT_PDFS_FOUND = "No_FJ_No_Complaint_PDFs_Found" # For all creditor types
     SESSION_ERROR = "Failed_Initial_Login_Or_Session" # Replaces generic "Failed_Initial_Login_Or_Session"

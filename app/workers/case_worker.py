@@ -12,30 +12,55 @@ from app.core.config import get_app_settings # To get current settings for worke
 logger = logging.getLogger(__name__)
 
 async def background_processor_worker(app: FastAPI, worker_id: int):
-    logger.info(f"Background Worker {worker_id}: Starting...")
-    
-    # Each worker gets its own UnicourtHandler instance with its own browser context/page
-    worker_settings = get_app_settings() # Get settings instance
-    playwright_instance = app.state.playwright_instance
-    
-    worker_unicourt_handler: Optional[UnicourtHandler] = None
     worker_browser = None
     worker_context = None
+    worker_dashboard_page = None
+    worker_unicourt_handler = None
+    worker_settings = get_app_settings()
+    playwright_instance = app.state.playwright_instance
     
-    try:
-        logger.info(f"Worker {worker_id}: Initializing Playwright browser context and dashboard page...")
-        # Create a UnicourtHandler without a dashboard page first, just for the context/page creation method
+    async def initialize_browser_resources(retry_count=0):
+        nonlocal worker_browser, worker_context, worker_dashboard_page, worker_unicourt_handler
+        
+        # Close any existing resources first
+        if worker_unicourt_handler and worker_browser and worker_context:
+            await worker_unicourt_handler.close_worker_browser_resources(worker_browser, worker_context)
+        elif worker_context:
+            await worker_context.close()
+        elif worker_browser:
+            await worker_browser.close()
+        
+        # Create fresh handler for setup
         temp_handler_for_setup = UnicourtHandler(playwright_instance, worker_settings)
+        
+        # On retry, force new session creation through login
+        if retry_count > 0:
+            logger.info(f"Worker {worker_id}: Attempting to create new session through login (retry {retry_count})...")
+            login_success = await temp_handler_for_setup.ensure_authenticated_session()
+            if not login_success:
+                logger.error(f"Worker {worker_id}: Failed to create new session through login.")
+                return False
+                
+        # Create new browser resources
         worker_browser, worker_context, worker_dashboard_page = \
             await temp_handler_for_setup.create_worker_browser_context_and_dashboard_page()
 
         if not worker_dashboard_page or not worker_browser or not worker_context:
-            logger.error(f"Worker {worker_id}: Failed to initialize Playwright resources. Worker cannot start.")
+            logger.error(f"Worker {worker_id}: Failed to initialize Playwright resources.")
+            return False
+            
+        # Create the worker's handler with the new page
+        worker_unicourt_handler = UnicourtHandler(playwright_instance, worker_settings, 
+                                                dashboard_page_for_worker=worker_dashboard_page)
+        logger.info(f"Worker {worker_id}: Playwright resources initialized successfully.")
+        return True
+    
+    try:
+        logger.info(f"Worker {worker_id}: Initializing Playwright browser context and dashboard page...")
+        setup_success = await initialize_browser_resources()
+        if not setup_success:
+            logger.error(f"Worker {worker_id}: Initial setup failed. Worker cannot start.")
             return
-
-        # Now create the actual handler for this worker with its dedicated page
-        worker_unicourt_handler = UnicourtHandler(playwright_instance, worker_settings, dashboard_page_for_worker=worker_dashboard_page)
-        logger.info(f"Worker {worker_id}: Playwright resources initialized. Ready for tasks.")
 
         llm_processor = LLMProcessor(worker_settings)
 
@@ -74,27 +99,45 @@ async def background_processor_worker(app: FastAPI, worker_id: int):
                     
                     logger.info(f"Worker {worker_id}: Starting processing for case {case_number_for_db} (ID: {case_id}). Active tasks: {app.state.active_processing_count}")
 
-                    try:
-                        case_processor_service = CaseProcessorService(
-                            db=db_session,
-                            settings=worker_settings,
-                            unicourt_handler=worker_unicourt_handler, # Pass worker-specific handler
-                            llm_processor=llm_processor
-                        )
-                        await case_processor_service.process_single_case(case_id, case_obj_for_processing)
-                    except Exception as e:
-                        logger.critical(f"Worker {worker_id}: Unhandled error during case {case_number_for_db} (ID: {case_id}) processing: {e}", exc_info=True)
-                        # Basic error status update in DB if process_single_case failed critically before setting status
-                        from app.db import crud, models as db_models # Local import for safety
-                        crud.update_case_status(db_session, case_id, db_models.CaseStatusEnum.WORKER_ERROR)
-                    finally:
-                        app.state.case_processing_queue.task_done()
-                        async with app.state.active_cases_lock:
-                            if case_number_for_db in app.state.actively_processing_cases:
-                                app.state.actively_processing_cases.remove(case_number_for_db)
-                        async with app.state.processing_count_lock:
-                            app.state.active_processing_count -= 1
-                        logger.info(f"Worker {worker_id}: Finished processing case {case_number_for_db} (ID: {case_id}). Active tasks: {app.state.active_processing_count}")
+                    retry_count = 0
+                    max_retries = 2
+                    while retry_count <= max_retries:
+                        try:
+                            case_processor_service = CaseProcessorService(
+                                db=db_session,
+                                settings=worker_settings,
+                                unicourt_handler=worker_unicourt_handler, # Pass worker-specific handler
+                                llm_processor=llm_processor
+                            )
+                            await case_processor_service.process_single_case(case_id, case_obj_for_processing)
+                            break  # Success, exit retry loop
+                            
+                        except Exception as e:
+                            if retry_count < max_retries and ("Connection closed" in str(e) or "Failed to ensure Unicourt session" in str(e)):
+                                retry_count += 1
+                                logger.warning(f"Worker {worker_id}: Session error during processing. Attempting retry {retry_count}/{max_retries}...")
+                                
+                                # Try to reinitialize with new session
+                                setup_success = await initialize_browser_resources(retry_count=retry_count)
+                                if not setup_success:
+                                    logger.error(f"Worker {worker_id}: Failed to reinitialize browser resources on retry {retry_count}")
+                                    continue
+                                
+                                await asyncio.sleep(2)  # Brief pause before retry
+                            else:
+                                logger.critical(f"Worker {worker_id}: Unhandled error during case {case_number_for_db} (ID: {case_id}) processing: {e}", exc_info=True)
+                                # Basic error status update in DB if process_single_case failed critically before setting status
+                                from app.db import crud, models as db_models # Local import for safety
+                                crud.update_case_status(db_session, case_id, db_models.CaseStatusEnum.WORKER_ERROR)
+                                break  # Exit retry loop on non-session errors
+                    
+                    app.state.case_processing_queue.task_done()
+                    async with app.state.active_cases_lock:
+                        if case_number_for_db in app.state.actively_processing_cases:
+                            app.state.actively_processing_cases.remove(case_number_for_db)
+                    async with app.state.processing_count_lock:
+                        app.state.active_processing_count -= 1
+                    logger.info(f"Worker {worker_id}: Finished processing case {case_number_for_db} (ID: {case_id}). Active tasks: {app.state.active_processing_count}")
                 finally:
                     db_session.close()
 

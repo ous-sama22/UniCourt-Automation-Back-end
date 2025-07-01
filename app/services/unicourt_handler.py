@@ -218,15 +218,30 @@ class UnicourtHandler:
             return None, None, None
 
     async def close_worker_browser_resources(self, browser: Optional[Browser], context: Optional[BrowserContext]):
-        if self.dashboard_page_for_worker and not self.dashboard_page_for_worker.is_closed():
-            await self.dashboard_page_for_worker.close()
-            self.dashboard_page_for_worker = None
+        # Close page if exists
+        if self.dashboard_page_for_worker:
+            try:
+                if not self.dashboard_page_for_worker.is_closed():
+                    await self.dashboard_page_for_worker.close()
+            except Exception:
+                logger.warning("Error while closing dashboard page", exc_info=True)
+            finally:
+                self.dashboard_page_for_worker = None
+
+        # Close context if exists
         if context:
-            try: await context.close()
-            except Exception: pass
+            try:
+                await context.close()
+            except Exception:
+                logger.warning("Error while closing browser context", exc_info=True)
+
+        # Close browser if exists and connected
         if browser and browser.is_connected():
-            try: await browser.close()
-            except Exception: pass
+            try:
+                await browser.close()
+            except Exception:
+                logger.warning("Error while closing browser", exc_info=True)
+
         logger.info("Closed worker browser resources.")
 
     async def clear_search_input(self, page: Page):
@@ -360,29 +375,76 @@ class UnicourtHandler:
         log_prefix = f"[{case_name_for_search} / {case_number_for_db_id}]"
         search_notes_list: List[str] = []
         
+        # Step 1: Initial Search by Case Name
         search_success, notes = await self._perform_search_on_dashboard(dashboard_page, case_name_for_search)
         if notes: search_notes_list.append(notes)
         if not search_success:
             return None, "; ".join(search_notes_list), None, None
 
+        # Step 2: Evaluate Initial Search Results
         all_results_locators = dashboard_page.locator(self.selectors.SEARCH_RESULT_ROW_DIV)
         num_results = await all_results_locators.count()
         logger.info(f"{log_prefix} Found {num_results} result(s) after case name search.")
 
-        target_case_link_locator: Optional[Locator] = None
-        
+        # Double check after a small delay if no results found
         if num_results == 0:
-            # Double check after a small delay
             await common.random_delay(1.0, 2.0)
             num_results = await all_results_locators.count()
-            if num_results == 0:
-                search_notes_list.append(f"No results for case name '{case_name_for_search}'.")
-                await playwright_utils.safe_screenshot(dashboard_page, self.settings, "case_search_name_no_results", common.sanitize_filename(case_name_for_search))
-                return None, "; ".join(search_notes_list), None, None
 
-        if num_results == 1:
+        target_case_link_locator: Optional[Locator] = None
+        
+        # Step 3: Handle Initial Search Results or Trigger Fallback
+        if num_results == 0:
+            # Initiate fallback search by case number
+            logger.info(f"{log_prefix} No results found by case name, initiating fallback search by case number.")
+            search_notes_list.append("No results for case name, attempting fallback search by case number.")
+            
+            # Reset search form for clean fallback search
+            await self.clear_search_input(dashboard_page)
+            
+            # Perform fallback search using case number as primary term
+            search_success, notes = await self._perform_search_on_dashboard(dashboard_page, case_number_for_db_id)
+            if notes: search_notes_list.append(notes)
+            if not search_success:
+                return None, "; ".join(search_notes_list), None, None
+            
+            # Evaluate fallback search results
+            all_results_locators = dashboard_page.locator(self.selectors.SEARCH_RESULT_ROW_DIV)
+            num_results = await all_results_locators.count()
+            logger.info(f"{log_prefix} Found {num_results} result(s) after case number fallback search.")
+            
+            if num_results == 0:
+                search_notes_list.append("No results found by case number. Case not found.")
+                await playwright_utils.safe_screenshot(dashboard_page, self.settings, "case_search_both_failed", f"{common.sanitize_filename(case_name_for_search)}_{case_number_for_db_id}")
+                return None, "; ".join(search_notes_list), None, None
+            elif num_results == 1:
+                search_notes_list.append("Single result found by case number fallback search.")
+                target_case_link_locator = all_results_locators.first.locator(self.selectors.SEARCH_RESULT_CASE_NAME_H3_A)
+            else:
+                # Multiple results from case number search, refine with case name
+                logger.info(f"{log_prefix} Multiple results ({num_results}) by case number, refining with case name.")
+                search_notes_list.append(f"Multiple results for case number, refining with case name.")
+                
+                search_success, notes = await self._perform_search_on_dashboard(dashboard_page, case_number_for_db_id, case_name_for_search)
+                if notes: search_notes_list.append(notes)
+                if not search_success:
+                    return None, "; ".join(search_notes_list), None, None
+                
+                all_refined_results_locators = dashboard_page.locator(self.selectors.SEARCH_RESULT_ROW_DIV)
+                num_refined_results = await all_refined_results_locators.count()
+                
+                if num_refined_results == 0:
+                    search_notes_list.append("No results after refining case number search with case name.")
+                    await playwright_utils.safe_screenshot(dashboard_page, self.settings, "case_search_refined_fallback_no_results", f"{common.sanitize_filename(case_name_for_search)}_{case_number_for_db_id}")
+                    return None, "; ".join(search_notes_list), None, None
+                
+                target_case_link_locator = all_refined_results_locators.first.locator(self.selectors.SEARCH_RESULT_CASE_NAME_H3_A)
+                if num_refined_results > 1:
+                    search_notes_list.append(f"Multiple ({num_refined_results}) results after fallback refinement; selecting first listed.")
+        
+        elif num_results == 1:
             target_case_link_locator = all_results_locators.first.locator(self.selectors.SEARCH_RESULT_CASE_NAME_H3_A)
-        elif num_results > 1:
+        else:  # num_results > 1 from initial name search
             logger.info(f"{log_prefix} Multiple results ({num_results}). Refining with case number '{case_number_for_db_id}'.")
             search_notes_list.append(f"Multiple ({num_results}) for name; refining with number.")
             search_success, notes = await self._perform_search_on_dashboard(dashboard_page, case_name_for_search, case_number_for_db_id)
@@ -399,7 +461,6 @@ class UnicourtHandler:
                 await playwright_utils.safe_screenshot(dashboard_page, self.settings, "case_search_refined_no_results", f"{common.sanitize_filename(case_name_for_search)}_{case_number_for_db_id}")
                 return None, "; ".join(search_notes_list), None, None
             
-            # If multiple matches, use the first one.
             target_case_link_locator = all_refined_results_locators.first.locator(self.selectors.SEARCH_RESULT_CASE_NAME_H3_A)
             if num_refined_results > 1:
                 search_notes_list.append(f"Multiple ({num_refined_results}) results after refinement; selecting first listed.")

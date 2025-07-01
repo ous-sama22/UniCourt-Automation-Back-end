@@ -59,7 +59,7 @@ trace.zip
 .pytest_cache/
 .venv/
 test_data/
-unicourt_download/
+unicourt_downloads/
 venv/
 .env
 config.json

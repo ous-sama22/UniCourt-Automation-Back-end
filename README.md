@@ -67,7 +67,6 @@ curl -X GET "http://localhost:8000/api/v1/service/status" \
 - [🐛 Troubleshooting](#-troubleshooting)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
-- [🆘 Support](#-support)
 
 ## ✨ Features
 

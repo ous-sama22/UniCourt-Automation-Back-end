@@ -65,7 +65,6 @@ curl -X GET "http://localhost:8000/api/v1/service/status" \
 - [🛠️ Development](#️-development)
 - [🐳 Docker Deployment](#-docker-deployment)
 - [🐛 Troubleshooting](#-troubleshooting)
-- [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
 ## ✨ Features
@@ -479,22 +478,6 @@ services:
 - Adjust `MAX_CONCURRENT_TASKS` based on your system resources
 - Monitor memory usage during large batch processing
 - Consider increasing timeout values for slow networks
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-
-- Follow PEP 8 style guidelines
-- Add type hints to all functions
-- Write comprehensive tests for new features
-- Update documentation for API changes
-- Use meaningful commit messages
 
 ## 📄 License
 

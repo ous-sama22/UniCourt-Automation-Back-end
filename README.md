@@ -2,14 +2,21 @@
 
 A comprehensive FastAPI-based backend service for automating UniCourt case processing, document extraction, and data analysis using Playwright automation and AI-powered document processing.
 
-## 🔗 Related Rep#### Check Case Status
+## 🔗 Related Repositories
+
+- **Frontend Repository**: [Unicourt_Automation_Front-End](https://github.com/ous-sama22/Unicourt_Automation_Front-End) - Google Apps Script-based frontend interface for Google Sheets integration
+- **This Repository**: [UniCourt-Automation-Back-end](https://github.com/ous-sama22/UniCourt-Automation-Back-end) - Backend API service
+
+## 📚 API Examples
+
+### Check Case Status
 
 ```bash
 curl -X GET "http://localhost:8000/api/v1/cases/CASE-001/status" \
      -H "X-API-Key: your_api_key"
 ```
 
-#### Get Batch Case Details
+### Get Batch Case Details
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/cases/batch-details" \
@@ -20,7 +27,7 @@ curl -X POST "http://localhost:8000/api/v1/cases/batch-details" \
      }'
 ```
 
-#### Update Configuration
+### Update Configuration
 
 ```bash
 curl -X PUT "http://localhost:8000/api/v1/service/config" \
@@ -32,15 +39,12 @@ curl -X PUT "http://localhost:8000/api/v1/service/config" \
      }'
 ```
 
-#### Check Service Status
+### Check Service Status
 
 ```bash
 curl -X GET "http://localhost:8000/api/v1/service/status" \
      -H "X-API-Key: your_api_key"
-```ies
-
-- **Frontend Repository**: [Unicourt_Automation_Front-End](https://github.com/ous-sama22/Unicourt_Automation_Front-End) - Google Apps Script-based frontend interface for Google Sheets integration
-- **This Repository**: [UniCourtAutomationBack-end---V4](https://github.com/ous-sama22/UniCourtAutomationBack-end---V4) - Backend API service
+```
 
 ## 🌐 Quick Links
 
@@ -140,8 +144,8 @@ curl -X GET "http://localhost:8000/api/v1/service/status" \
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/ous-sama22/UniCourtAutomationBack-end---V4.git
-   cd UniCourtAutomationBack-end---V4
+   git clone https://github.com/ous-sama22/UniCourt-Automation-Back-end.git
+   cd UniCourt-Automation-Back-end
    ```
 
 2. **Create virtual environment**
@@ -262,6 +266,14 @@ The easiest way to use this backend is through the Google Apps Script frontend:
 
 1. **Set up the frontend**: Follow the installation guide in the [Frontend Repository](https://github.com/ous-sama22/Unicourt_Automation_Front-End)
 2. **Configure connection**: In Google Sheets, use the UniCourt Processor menu to configure your backend URL and API key
+
+   > **Note**: If running the backend locally, you'll need to use a service like ngrok to create a public URL:
+   > ```bash
+   > # Install ngrok from https://ngrok.com/
+   > ngrok http 8000
+   > ```
+   > Use the provided ngrok URL (e.g., https://xxxx-xx-xx-xxx-xx.ngrok.io) in your Google Sheets configuration instead of localhost.
+
 3. **Manage cases**: Use the intuitive Google Sheets interface for case management and monitoring
 
 ### Direct API Usage
@@ -487,4 +499,4 @@ services:
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+Both the backend and frontend repositories are licensed under the MIT License. See the LICENSE file in each repository for details.

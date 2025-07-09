@@ -2,7 +2,7 @@
 
 A high-performance FastAPI backend service that automates UniCourt case processing through headless browser automation. Features AI-powered document analysis using LLM models, asynchronous processing queue, and comprehensive REST API for case management and data extraction.
 
-**Topics:** unicourt, automation, python, api, fastapi, backend-api, dockerfile, browser-automation, playwright-python, llm-integration, async-processing, rest-api, document-analysis, legal-tech, sqlalchemy, openrouter-api
+**Topics:** unicourt, automation, python, api, fastapi, backend-api, dockerfile, browser-automation, playwright-python, llm-integration, async-processing, rest-api, document-analysis, legal-tech, sqlalchemy, docker-compose, openrouter-api
 
 ## 🔗 Related Repositories
 

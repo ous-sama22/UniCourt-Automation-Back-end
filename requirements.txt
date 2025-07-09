@@ -8,8 +8,10 @@ SQLAlchemy==2.0.29 # For DB
 pydantic
 pydantic[email]
 python-multipart # For FastAPI file uploads, if needed in future
-Pillow==10.3.0     # Or latest stable version
+Pillow==10.3.0     
 PyMuPDF==1.24.1
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.21.1  # Optional but recommended for faster string matching by fuzzywuzzy
 
 # For testing
 pytest

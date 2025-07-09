@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Optional, Tuple, List, Set, Dict, Any, AsyncGenerator
 from pydantic import BaseModel
 from playwright.async_api import Playwright, Page, BrowserContext, Browser, TimeoutError as PlaywrightTimeoutError, expect, Download, Locator
+from fuzzywuzzy import fuzz
+import unicodedata
 
 from app.core.config import AppSettings, UnicourtSelectors
 from app.db.models import DocumentTypeEnum, DocumentProcessingStatusEnum # Enums for logic
@@ -554,11 +556,24 @@ class UnicourtHandler:
             docket_area_locator = case_page.locator(self.selectors.VOLUNTARY_DISMISSAL_DOCKET_TEXT_AREA)
             docket_area_content = await docket_area_locator.inner_text(timeout=self.settings.GENERAL_TIMEOUT_SECONDS * 500) # Using a shorter timeout as content should be loaded.
 
-            if 'Order Granting Motion to Vacate'.lower() in docket_area_content.lower() or 'Notice of Voluntary Dismissal'.lower() in docket_area_content.lower():
-                logger.info(f"[{case_identifier}] 'Order Granting Motion to Vacate' or 'Notice of Voluntary Dismissal' found on page (case-insensitive).")
-                return True
+            keywords_to_check = [
+                "Order to Vacate", "Motion to Vacate Granted", 
+                "Vacated Judgment", "Notice of Voluntary Dismissal", 
+                "Stipulation of Dismissal", "Order of Dismissal", 
+                "Case Dismissed", "Judgment Set Aside", 
+                "Order Setting Aside Judgment", "Notice of Withdrawal", 
+                "Case Withdrawn", "Judgment Annulled", 
+                "Order to Quash", "Motion to Quash Granted"
+                ]
 
-            logger.info(f"[{case_identifier}] 'Order Granting Motion to Vacate' and 'Notice of Voluntary Dismissal' NOT found on page.")
+            
+            docket_content_lower = docket_area_content.lower()
+            for keyword in keywords_to_check:
+                if keyword.lower() in docket_content_lower:
+                    logger.info(f"[{case_identifier}] Found dismissal/vacate indicator: '{keyword}'")
+                    return True
+
+            logger.info(f"[{case_identifier}] No dismissal/vacate indicators found in docket entries.")
             return False
 
         except PlaywrightTimeoutError as e:
@@ -571,6 +586,21 @@ class UnicourtHandler:
             await playwright_utils.safe_screenshot(case_page, self.settings, "voluntary_dismissal_error", case_identifier)
             return False
         
+    
+    def _is_creditor_name_match(self, party_name: str, input_creditor_name: str) -> bool:
+        """
+        Determine if party_name matches the input_creditor_name using fuzzywuzzy.
+        Returns True if it's a match (should be excluded), False otherwise.
+        """
+        if not party_name or not input_creditor_name:
+            return False
+
+        # Use fuzzywuzzy ratio for similarity matching
+        similarity_ratio = fuzz.ratio(party_name, input_creditor_name)
+        
+        # 85% similarity threshold - adjust as needed
+        return similarity_ratio >= 85
+
     async def extract_party_names_from_parties_tab(
         self, case_page: Page, target_creditor_type: str, input_creditor_name: str, case_identifier: str
     ) -> List[str]:
@@ -603,12 +633,115 @@ class UnicourtHandler:
                     party_name = common.clean_html_text(await party_name_element.inner_text(timeout=2000))
                     party_type_str = common.clean_html_text(await party_type_element.inner_text(timeout=2000))
 
-                    # Normalize party_type_str for comparison (e.g. "Plaintiff", "Defendant")
-                    if target_creditor_type.lower() in party_type_str.lower():
-                        # Exclude the input creditor name itself
-                        if input_creditor_name.lower().strip() not in party_name.lower().strip():
-                            associated_party_names.append(party_name)
-                            logger.debug(f"[{case_identifier}] Found matching associated party: '{party_name}' (Type: '{party_type_str}')")
+                    # Check if this party matches the target creditor type
+                    if target_creditor_type.lower() not in party_type_str.lower():
+                        continue
+                    
+                    # Skip common financial institutions and system entities
+                    skip_keywords = [
+                        "bank","credit", "funding", "internal revenue service", 
+                        "cach", "capital", "union", "state", "asset", "recovery", 
+                        "financial", "fcu", "fargo", "casualty", "hospital","CAVALRY", 
+                        "investments", "compensation", "workers", "student", "unifund", 
+                        "american express", "insurance", "savings", "mortgage", 
+                        "county", "university", "loan", "servicing", "school", 
+                        "community", "hosp", "city of", "west coast cu", "hma llc", 
+                        "suncoast", "HSBC", "CHRYSLER", "HOA", "card services", 
+                        "CACV", "target", "national", "brightstar", "finance", 
+                        "taxation", "commissioner", "finance", "BUREAU", "recoveries", 
+                        "compliance", "consumers", "rent a car", 
+                        "SPRINGLEAF HOME EQUITY INC", "sherwin", "washington mutual", 
+                        "lending", "midflorida", "budget", "john deere", "home equity", 
+                        "CONDOMINI", "ocw retail", "us of america", "st of colo", 
+                        "liberty mutual", "account management", "resolutions", 
+                        "accounts retrievable", "american builders", "cisco", 
+                        "deere", "collection", "INVESTMENT RETRIEVERS INC", 
+                        "homeowners", "WAKEFIELD & ASSOCIATES INC", "point loma", 
+                        "college", "CARDFLEX INC", "commonwealth", "water management", 
+                        "RBS CITIZENS NA", "trust", "condo", "equity one", "PBC CU", 
+                        "shopping center", "american general", "portfolio management", 
+                        "hotel", "first service", "midland central", "oil", 
+                        "NEIGHBORHOOD NETWORKS", "AMERICU", "health systems", 
+                        "FUNDATION", "AUTOVEST", "tekton", "abf freight", "fedex", 
+                        "tax", "of america", "SCP DISTRIBUTORS", "owners assn", 
+                        "Government", "Stewart", "INS Group", "Prop Owners", 
+                        "Maintenance ASSN", "Wachovia", "Court of","Beneficial Florida", 
+                        "Santander", "Receivables", "financing", "CNTY", "CARMAX", 
+                        "GMAC LLC", "ECONOMIC DEV", "BOARD", "HAJOCA", "SYSCO", 
+                        "SUBSIDENCE", "INLAND AMERICAN", "GARLAND ISD", "BYZFUNDER", 
+                        "NAR INC", "FOUNDERS CONFERENCE", "COLLECT", "NUMERICA CU", 
+                        "SAFWAY SERVICES LLC", "GMAC INC", "REGIONAL WATER", 
+                        "CLEARWATER NEIGHBORHOOD", "ENTERPRISE LEASING", 
+                        "MEMORIAL HEALTH", "EXP REALTY LLC", "LA COMMERCIAL GROUP INC", 
+                        "ASSN", "MEDICAL CENTER", "NSTAR ELECTRIC", "CRAFCO INC", 
+                        "MCT GROUP", "PALLIDA LLC", "DODEKA LLC", "ANTERO RESOURCES", 
+                        "ELLIOTT ELECTRIC SUPPLY INC", "PREMIERONE CU", 
+                        "DODGE ENTS INC", "ALLEGHENY RESOURCES LLC", "ACME LIFT CO LLC", 
+                        "H&E EQUIPMENT SERVICES INC", "US Securities", 
+                        "Exchange Commission", "AMPLIFY CU", "FORD MOTOR", 
+                        "METRO REVENUE", "BEST SERVICE CO INC", "VYSTAR CU", 
+                        "COMPREHENSIVE LEGAL SOLUTIONS", "US FOODS INC", 
+                        "GRIMES CENTRAL APPRAISAL", "VIBE CU", "UHG I LLC", 
+                        "GUARDIANS CU", "BENEFICIAL CALIFORNIA INC", "DNFIS USA LLC", 
+                        "CAMPUS USA CU", "PYOD LLC", "SUNBELT RENTALS INC", 
+                        "DELTA FUEL CO LLC", "HEALTH SYSTEM", "BELLCO CU", 
+                        "JACKSON HEWITT INC", "FED EX OFFICE", "EMPLOYEES CU", 
+                        "PATELCO CU", "CAG ACCEPTANCE LLC", "INS CO", "PORTFOLIO DEBT", 
+                        "PORTFOLIO INVS", "FC MARKETPLACE LLC", "ACCELA INC", 
+                        "PORTFOLIO INVS", "SEARS", "DYCK-O'NEAL INC", 
+                        "RAMADA WORLDWIDE INC", "COMMINITY CU", "CONNECT CU", 
+                        "HEALTHCARE SYSTEM", "LOTTERY", "FEDERATED FIN", 
+                        "UNITED JOINT VENTURE", "SUNNOVA ENERGY CORP", 
+                        "RIVER VALLEY CU", "CHERRYWOOD ENTS LLC", "UNIFIRST CORP", 
+                        "MID HUDSON VALLEY FED CU", "BENEFICIAL NEW YORK INC", 
+                        "GLOBAL LINK SYSTEMS INC", "NIAGARA MOHAWK POWER CORP", 
+                        "VALENTINE ELECTRIC INC", "VANTAGE WEST CU", 
+                        "ATLANTA DEV AUTHORITY", "TBA CU", "LAKE MICHIGAN CU", 
+                        "GENISYS CU", "ELGA CU", "ADVENTURE CU", "DOW CU", 
+                        "AMERICAN 1 CU", "GENISYS CU", "SECURITIES & EXCHANGE", 
+                        "MERCHANT ADVANCE LLC", "DYKE-O'NEAL INC", "PANHANDLE CU", 
+                        "AMERI CU", "District Court", "Department", "NNSECU", 
+                        "WESTLAKE SERVICES INC", "MORGAN STANLEY", "TIAA FSB", 
+                        "FAIRWINDS CU", "SPACE COAST CU", "MERCURY INDEMNITY", 
+                        "ENTERPRISE RENT", "HERTZ CORP", "BANCO POPULAR", "INDEMNITY", 
+                        "BERKSHIRE", "DEUTSCHE BK", "FIRST SOUTHWESTERN", 
+                        "ORANGE & ROCKLAND UTILITIES", "LAMARCA INS", "LOS ANGELES DEPT", 
+                        "FLORIDA CU", "CENTRAL CU OF FLORIDA", "WESTLAKE SERVICES LLC", 
+                        "MID FLORIDA CU", "ISPC", "NELNET INC", 
+                        "NISSAN MOTOR ACCEPTANCE CORP", "CFG MERCHANT SOLUTIONS LLC", 
+                        "WESTLAKE SERVICES LLC", "FEDERAL TRADE COMMISSION", 
+                        "CHASE, REVENUE SERVICES", "PRIORITY ONE CU", "ISPC", 
+                        "BELLSOUTH TELECOMMUNICATIONS", "ATTY GENERAL", 
+                        "FLORIDA CLINICAL PRACTICE ASSO", "VILLAGE OF WELLINGTON", 
+                        "FLORIDA TRANSPORTATION CU", "COLUMBIA SPORTSWEAR USA CORP", 
+                        "COMDATA NETWORK INC", "IPFS CORP", "KEYPOINT CU", 
+                        "FLORIDA RETAIL FEDERATION", "CONSOLIDATED ELECTRICAL DISTRI", 
+                        "AMERICAN BLDRS & CONTRACTORS", "FLORIDA CENTRAL CU", "DEUTSCHE BK", 
+                        "HIBU INC", "CIVIL ENFORCEMENT DIVISION", "INVERSTMENTS BUILDERS/FLORIDA", 
+                        "PORTFOLIO ROCOVERY ASSOCIATES", "SUN LIFE ASSURANCE", "MASDA", 
+                        "PRIMUS AUTOMOTIVE", "ACCLAIM CORP", "BUILDERS FIRSTSOURCE", "CIT GROUP", 
+                        "SUN CU", "BOTFLY LLC", "GULFSIDE SUPPLY INC", "ENVISION CU", 
+                        "FLORIDA TELCO CU", "YELLOW BOOK SALES", "COMPTROLLER", "INSURANC", 
+                        "FLORIDA COMMERCE CU", "OCMAC LLC", "ACCOUNTS RECEIVABLE", 
+                        "SOUTHWEST GENERAL HEALTH CTR", "BIZFUND LLC", "CU"
+                    ]
+                    
+                    party_name_lower = party_name.lower().strip()
+                    
+                    # Skip if party name contains any of the skip keywords
+                    if any(keyword.lower() in party_name_lower for keyword in skip_keywords):
+                        logger.debug(f"[{case_identifier}] Skipping party '{party_name}' due to skip keyword match.")
+                        continue
+                    
+                    # Use fuzzywuzzy to exclude the input creditor
+                    if self._is_creditor_name_match(party_name, input_creditor_name):
+                        logger.debug(f"[{case_identifier}] Excluding party '{party_name}' as it matches input creditor '{input_creditor_name}'.")
+                        continue
+                    
+                    # If passed all checks, add the party name
+                    associated_party_names.append(party_name)
+                    logger.debug(f"[{case_identifier}] Found matching associated party: '{party_name}' (Type: '{party_type_str}')")
+                    
                 except Exception as e_row:
                     logger.warning(f"[{case_identifier}] Error processing a party row: {e_row}")
             

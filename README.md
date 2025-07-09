@@ -207,13 +207,6 @@ The `config.json` file contains client-specific credentials and settings that ca
 }
 ```
 
-**Available LLM Models:**
-- `anthropic/claude-3-haiku` (Fast, cost-effective)
-- `anthropic/claude-3-sonnet` (Balanced performance)
-- `anthropic/claude-3-opus` (Highest quality)
-- `google/gemini-2.0-flash-001` (Google's latest)
-- `meta-llama/llama-3.1-70b-instruct` (Open source)
-
 **Configuration Updates:**
 - Can be updated through the frontend interface
 - Can be updated via API: `PUT /api/v1/service/config`
